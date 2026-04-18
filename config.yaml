@@ -1,0 +1,44 @@
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen2.5-coder:1.5b"
+  keep_alive: "30m"
+  stream: true
+  options:
+    temperature: 0.2
+    num_ctx: 2048
+    num_thread: 4
+agent:
+  max_history: 8
+  system_prompt: |
+    You are a lightweight local coding and automation assistant running fully offline.
+    You can perform actions by outputting a JSON block.
+    If you need to read a file, output exactly:
+    ```json
+    {"name": "read_file", "arguments": {"path": "file.txt"}}
+    ```
+    If you need to write a file, output exactly:
+    ```json
+    {"name": "write_file", "arguments": {"path": "file.txt", "content": "..."}}
+    ```
+    If you need to run a command, output exactly:
+    ```json
+    {"name": "run_command", "arguments": {"command": "ls", "args": ["-la"]}}
+    ```
+    CRITICAL: ONLY output JSON if you are performing one of the three actions above (read_file, write_file, run_command). For all other responses, such as answering questions, greetings, or summarizing tool results, you MUST use normal conversational text and MUST NOT output JSON.
+tools:
+  enabled: true
+  use_native_tools: false
+  enable_read_file: true
+  enable_write_file: true
+  enable_run_command: true
+  confirm_run_command: true
+  allowed_commands:
+    - cat
+    - ls
+    - pwd
+    - grep
+    - find
+    - head
+    - tail
+    - sed
+    - awk
