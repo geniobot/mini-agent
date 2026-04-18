@@ -68,13 +68,14 @@ Problem:
 
 Improved MVP with:
 - `go.sum`
-- optional tools mode
-- fallback parsing when the model printed JSON-like tool requests instead of structured tool calls
+- optional native tools mode (`use_native_tools`)
+- highly reliable fallback parsing when the model prints structured JSON tool requests
+- hidden JSON outputs in the terminal for seamless chat
 - confirmation before `run_command`
 
 Status:
-- plain chat works
-- tool mode was not reliable enough
+- plain chat works seamlessly
+- fallback JSON tool mode is now stable and reliable with small models like `qwen2.5-coder:1.5b`
 - this is the version the user liked most overall and pushed to GitHub
 
 ### V3
@@ -97,11 +98,10 @@ Reliable today:
 - small-model operation on older hardware
 - direct use with models like `gemma2:2b` in chat-only mode
 - use with `qwen2.5-coder:1.5b` for experimentation
+- robust action planning and file action execution using strict structured JSON fallback
 
 Not yet fully reliable:
-- local file action execution driven by the model
-- robust action planning on weak small models
-- seamless tool behavior comparable to a polished agent product
+- seamless native tool behavior comparable to a polished agent product (depends heavily on model capabilities)
 
 ## Models used during development
 

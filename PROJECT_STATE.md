@@ -9,16 +9,16 @@ Create a lightweight local AI assistant for older computers using Ollama directl
 
 ## Current state
 
-The strongest usable version is V2.
+The strongest usable version is V2 (now essentially V2.1).
 That is the current baseline.
 
 V2 characteristics:
 - Go CLI
 - local config file
 - direct Ollama API use
-- chat works
-- optional tool mode exists conceptually
-- tool reliability is still incomplete
+- chat works seamlessly (JSON outputs are hidden for human readability)
+- optional native tool mode exists conceptually, but relies on a solid strict structured JSON fallback parser for reliability
+- tool reliability is solid for small models like `qwen2.5-coder:1.5b`
 
 V3 explored a better control idea using structured planning, but the generated versions had compile/packaging issues and should not be treated as production-ready.
 
