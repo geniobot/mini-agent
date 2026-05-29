@@ -147,28 +147,30 @@ No other dependencies. The only Go module beyond the standard library is `gopkg.
 
 ## Installation
 
-### From source (recommended)
+### One-line install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/install.sh | bash
+```
+
+Downloads the source tarball, builds with Go, and installs the binary to `/usr/local/bin`. No git required. Prompts for `sudo` only if `/usr/local/bin` is not writable.
+
+**Requirements:** Go 1.22+ and curl must be installed.
+
+### Update
+
+Run the same command again — it always pulls the latest `main` and rebuilds.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/install.sh | bash
+```
+
+### From source (manual)
 
 ```bash
 git clone https://github.com/geniobot/mini-agent.git
 cd mini-agent
 make install        # builds with -ldflags "-s -w" and copies to /usr/local/bin
-```
-
-### Update an existing installation
-
-```bash
-cd mini-agent
-git pull
-make install
-```
-
-### Run without installing
-
-```bash
-git clone https://github.com/geniobot/mini-agent.git
-cd mini-agent
-make run            # go run ./cmd/mini-agent/
 ```
 
 ### Build only
@@ -180,7 +182,7 @@ make build          # output: ./bin/mini-agent
 ### Uninstall
 
 ```bash
-make uninstall      # removes /usr/local/bin/mini-agent
+sudo rm /usr/local/bin/mini-agent
 ```
 
 ---
