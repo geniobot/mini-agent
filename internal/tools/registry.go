@@ -6,7 +6,7 @@ import (
 	"strings"
 
 	"mini-agent/internal/config"
-	"mini-agent/internal/ollama"
+	"mini-agent/internal/llm"
 )
 
 type Registry struct {
@@ -27,6 +27,10 @@ type FileWriteArgs struct {
 	Content string `json:"content"`
 }
 
+type ListDirArgs struct {
+	Path string `json:"path"`
+}
+
 func New(cfg config.ToolsConfig) *Registry {
 	return &Registry{cfg: cfg}
 }
@@ -35,34 +39,48 @@ func (r *Registry) Enabled() bool {
 	return r.cfg.Enabled
 }
 
-func (r *Registry) Specs() []ollama.ToolSpec {
+func (r *Registry) Specs() []llm.ToolSpec {
 	if !r.cfg.Enabled {
 		return nil
 	}
-	var specs []ollama.ToolSpec
+	var specs []llm.ToolSpec
 	if r.cfg.EnableReadFile {
-		specs = append(specs, ollama.ToolSpec{Type: "function", Function: ollama.ToolFunction{
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
 			Name:        "read_file",
 			Description: "Read a UTF-8 text file from disk.",
 			Parameters:  schema(map[string]string{"path": "string"}, []string{"path"}),
 		}})
 	}
 	if r.cfg.EnableWriteFile {
-		specs = append(specs, ollama.ToolSpec{Type: "function", Function: ollama.ToolFunction{
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
 			Name:        "write_file",
-			Description: "Write a UTF-8 text file to disk.",
+			Description: "Write (overwrite) a UTF-8 text file to disk.",
 			Parameters:  schema(map[string]string{"path": "string", "content": "string"}, []string{"path", "content"}),
 		}})
 	}
+	if r.cfg.EnableAppendFile {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "append_file",
+			Description: "Append text to a file, creating it if it does not exist.",
+			Parameters:  schema(map[string]string{"path": "string", "content": "string"}, []string{"path", "content"}),
+		}})
+	}
+	if r.cfg.EnableListDir {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "list_dir",
+			Description: "List the contents of a directory.",
+			Parameters:  schema(map[string]string{"path": "string"}, []string{"path"}),
+		}})
+	}
 	if r.cfg.EnableRunCmd {
-		specs = append(specs, ollama.ToolSpec{Type: "function", Function: ollama.ToolFunction{
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
 			Name:        "run_command",
 			Description: "Run an allowed local shell command.",
 			Parameters: map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"command": map[string]interface{}{"type": "string"},
-					"args": map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+					"args":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
 				},
 				"required": []string{"command"},
 			},
@@ -85,6 +103,18 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			return "", err
 		}
 		return WriteFile(a.Path, a.Content)
+	case "append_file":
+		var a FileWriteArgs
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		return AppendFile(a.Path, a.Content)
+	case "list_dir":
+		var a ListDirArgs
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		return ListDir(a.Path)
 	case "run_command":
 		var a CommandArgs
 		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
@@ -109,6 +139,10 @@ func (r *Registry) AllowedCommandPrompt(arguments string) string {
 
 func (r *Registry) ConfirmRunCommand() bool {
 	return r.cfg.ConfirmRunCmd
+}
+
+func (r *Registry) ConfirmWriteFile() bool {
+	return r.cfg.ConfirmWriteFile
 }
 
 func (r *Registry) allowed(cmd string) bool {
