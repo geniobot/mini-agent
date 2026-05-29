@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="https://github.com/geniobot/mini-agent/archive/refs/heads/main.tar.gz"
 BINARY="mini-agent"
-VERSION="v2.5.0"
+VERSION="v2.6.0"
 INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 
 # ── colors (disabled when NO_COLOR is set or stdout is not a terminal) ────────
@@ -56,6 +56,19 @@ mkdir -p "$INSTALL_DIR"
 install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 printf "${GRN}done${RST}\n"
 
+# ── config ────────────────────────────────────────────────────────────────────
+CONFIG_DIR="$HOME/.mini-agent"
+CONFIG_FILE="$CONFIG_DIR/config.yaml"
+CONFIG_URL="https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml"
+printf "${DIM}Config...${RST}      "
+mkdir -p "$CONFIG_DIR"
+if [ ! -f "$CONFIG_FILE" ]; then
+  curl -fsSL "$CONFIG_URL" -o "$CONFIG_FILE"
+  printf "${GRN}done${RST}\n"
+else
+  printf "${DIM}kept existing${RST}\n"
+fi
+
 # ── banner ────────────────────────────────────────────────────────────────────
 SEP="${DIM}  ──────────────────────────────────────────────────${RST}"
 
@@ -84,12 +97,7 @@ echo ""
 p "     ${DIM}1. Pull a model (if you haven't)${RST}"
 p "        ollama pull qwen2.5-coder:1.5b"
 echo ""
-p "     ${DIM}2. Set up your config${RST}"
-p "        mkdir -p ~/.mini-agent"
-p "        curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml \\"
-p "             -o ~/.mini-agent/config.yaml"
-echo ""
-p "     ${DIM}3. Run${RST}"
+p "     ${DIM}2. Run${RST}"
 p "        mini-agent"
 echo ""
 p "$SEP"
