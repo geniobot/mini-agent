@@ -26,7 +26,8 @@ echo "done"
 
 # ── build ────────────────────────────────────────────────────────────────────
 printf 'Building...    '
-go build -ldflags "-s -w" -o "$TMP/$BINARY" "$TMP/mini-agent-main/cmd/$BINARY"
+cd "$TMP/mini-agent-main"
+go build -ldflags "-s -w" -o "$TMP/$BINARY" ./cmd/$BINARY
 echo "done"
 
 # ── install ──────────────────────────────────────────────────────────────────
@@ -41,6 +42,9 @@ echo "done"
 
 echo ""
 echo "  ✓  mini-agent installed"
-echo "     run:    mini-agent"
-echo "     config: cp $TMP/mini-agent-main/config.yaml ~/.mini-agent/config.yaml"
+echo "     run: mini-agent"
+echo ""
+echo "  First time? Set up a config:"
+echo "     mkdir -p ~/.mini-agent"
+echo "     curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml -o ~/.mini-agent/config.yaml"
 echo ""
