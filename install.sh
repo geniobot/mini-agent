@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="https://github.com/geniobot/mini-agent/archive/refs/heads/main.tar.gz"
 BINARY="mini-agent"
-INSTALL_DIR="${PREFIX:-/usr/local}/bin"
+INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 
 # ── dependency check ─────────────────────────────────────────────────────────
 if ! command -v go &>/dev/null; then
@@ -41,12 +41,18 @@ echo "done"
 # ── install ───────────────────────────────────────────────────────────────────
 printf "Installing to %s... " "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
-if [ -w "$INSTALL_DIR" ]; then
-  install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
-else
-  sudo install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
-fi
+install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
 echo "done"
+
+# Warn if the install directory is not in PATH
+case ":$PATH:" in
+  *":$INSTALL_DIR:"*) ;;
+  *) echo ""
+     echo "  note: $INSTALL_DIR is not in your PATH."
+     echo "  Add this to ~/.bashrc or ~/.profile:"
+     echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
+     ;;
+esac
 
 echo ""
 echo "  mini-agent installed. Run: mini-agent"
