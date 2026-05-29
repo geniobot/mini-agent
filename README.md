@@ -155,6 +155,14 @@ cd mini-agent
 make install        # builds with -ldflags "-s -w" and copies to /usr/local/bin
 ```
 
+### Update an existing installation
+
+```bash
+cd mini-agent
+git pull
+make install
+```
+
 ### Run without installing
 
 ```bash
