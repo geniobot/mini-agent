@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -105,6 +106,7 @@ func (l *Loop) Run() error {
 		case input == "/clear":
 			l.session = session.New(l.cfg.Agent.SystemPrompt, l.cfg.Agent.MaxHistory, l.maxCtx)
 			l.printf("%s[session cleared]%s\n", ansiDim, ansiReset)
+			continue
 		case input == "/forget" || strings.HasPrefix(input, "/forget "):
 			n := 2
 			if rest := strings.TrimSpace(strings.TrimPrefix(input, "/forget")); rest != "" {
@@ -114,6 +116,15 @@ func (l *Loop) Run() error {
 			}
 			l.session.DropOldest(n)
 			l.printf("%s[dropped %d messages from history]%s\n", ansiDim, n, ansiReset)
+			continue
+		case input == "/history" || strings.HasPrefix(input, "/history "):
+			n := 6
+			if rest := strings.TrimSpace(strings.TrimPrefix(input, "/history")); rest != "" {
+				if v, err := strconv.Atoi(rest); err == nil && v > 0 {
+					n = v
+				}
+			}
+			l.printHistory(n)
 			continue
 		case input == "/help":
 			l.printHelp()
@@ -143,9 +154,8 @@ func (l *Loop) Run() error {
 		// A second Ctrl+C (while not in a generation) uses the default handler and exits.
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		var err error
-		if strings.HasPrefix(input, "/run ") {
-			goal := strings.TrimSpace(strings.TrimPrefix(input, "/run "))
-			err = l.runGoal(ctx, goal)
+		if goal, ok := strings.CutPrefix(input, "/run "); ok {
+			err = l.runGoal(ctx, strings.TrimSpace(goal))
 		} else {
 			err = l.handle(ctx, input)
 		}
@@ -164,7 +174,15 @@ func (l *Loop) Run() error {
 func (l *Loop) printPrompt() {
 	if l.maxCtx > 0 {
 		tokens := session.EstimateTokens(l.session.Snapshot())
-		fmt.Printf("\n%s[%d/%d tok]%s > ", ansiDim, tokens, l.maxCtx, ansiReset)
+		pct := float64(tokens) / float64(l.maxCtx)
+		color := ansiDim
+		switch {
+		case pct >= 0.90:
+			color = ansiRed
+		case pct >= 0.75:
+			color = ansiYellow
+		}
+		fmt.Printf("\n%s[%d/%d tok]%s > ", color, tokens, l.maxCtx, ansiReset)
 	} else {
 		fmt.Print("\n> ")
 	}
@@ -175,6 +193,7 @@ func (l *Loop) printHelp() {
 	cmds := [][2]string{
 		{"/run <goal>", "run a goal autonomously (multi-step)"},
 		{"/load <file>", "inject a file into conversation context"},
+		{"/history [N]", "show last N messages from session (default 6)"},
 		{"/model [name]", "show or switch the active model"},
 		{"/unload", "evict model from RAM to free memory"},
 		{"/status", "show session and model status"},
@@ -250,13 +269,7 @@ func (l *Loop) pingOllama(display bool) error {
 	suffix := host
 	if ml, ok := l.client.(llm.ModelLister); ok {
 		if models, err := ml.ListModels(); err == nil {
-			found := false
-			for _, m := range models {
-				if m == l.cfg.Ollama.Model {
-					found = true
-					break
-				}
-			}
+			found := slices.Contains(models, l.cfg.Ollama.Model)
 			suffix = fmt.Sprintf("%s (%d models available)", host, len(models))
 			if !found {
 				suffix += fmt.Sprintf(" \033[33m— model %q not found, run: ollama pull %s\033[0m",
@@ -331,11 +344,15 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 		if err != nil {
 			result = "tool error: " + err.Error()
 		}
-		l.printf("- %s\n", tc.Function.Name)
+		if summary := toolSummary(tc); summary != "" {
+			l.printf("  %s[%s]%s %s → %s\n", ansiTeal, tc.Function.Name, ansiReset, summary, truncStr(strings.TrimSpace(result), 80))
+		} else {
+			l.printf("  %s[%s]%s %s\n", ansiTeal, tc.Function.Name, ansiReset, truncStr(strings.TrimSpace(result), 80))
+		}
 		if l.cfg.Tools.UseNativeTools {
 			l.session.AddMessage(session.Message{Role: "tool", Name: tc.Function.Name, Content: result})
 		} else {
-			toolResults.WriteString(fmt.Sprintf("Tool %s executed. Result:\n%s\n", tc.Function.Name, result))
+			fmt.Fprintf(&toolResults, "Tool %s executed. Result:\n%s\n", tc.Function.Name, result)
 		}
 	}
 
@@ -450,7 +467,7 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 	}
 	switch req.Name {
 	case "read_file", "write_file", "append_file", "list_dir", "run_command":
-		var argsMap map[string]interface{}
+		var argsMap map[string]any
 		_ = json.Unmarshal(req.Arguments, &argsMap)
 		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
 	default:
@@ -470,7 +487,7 @@ func confirm(prompt string) bool {
 }
 
 // printf is a quiet-aware print: suppressed when l.quiet is true.
-func (l *Loop) printf(format string, args ...interface{}) {
+func (l *Loop) printf(format string, args ...any) {
 	if !l.quiet {
 		fmt.Printf(format, args...)
 	}
@@ -485,7 +502,74 @@ func isContextOverflow(err error) bool {
 		(strings.Contains(s, "exceed") || strings.Contains(s, "too long") || strings.Contains(s, "overflow"))
 }
 
-func numCtx(opts map[string]interface{}) int {
+// toolSummary returns a human-readable description of a tool call's key arguments.
+func toolSummary(tc session.ToolCall) string {
+	args := tc.Function.Arguments
+	switch tc.Function.Name {
+	case "read_file", "list_dir":
+		if p, ok := args["path"].(string); ok {
+			return p
+		}
+	case "write_file", "append_file":
+		if p, ok := args["path"].(string); ok {
+			if c, ok := args["content"].(string); ok {
+				return fmt.Sprintf("%s (%d bytes)", p, len(c))
+			}
+			return p
+		}
+	case "run_command":
+		if cmd, ok := args["command"].(string); ok {
+			if rawArgs, ok := args["args"].([]any); ok && len(rawArgs) > 0 {
+				parts := []string{cmd}
+				for _, a := range rawArgs {
+					parts = append(parts, fmt.Sprint(a))
+				}
+				return strings.Join(parts, " ")
+			}
+			return cmd
+		}
+	}
+	return ""
+}
+
+func (l *Loop) printHistory(n int) {
+	msgs := l.session.Snapshot()
+	var chat []session.Message
+	for _, m := range msgs {
+		if m.Role != "system" {
+			chat = append(chat, m)
+		}
+	}
+	if len(chat) == 0 {
+		fmt.Printf("%s[no history]%s\n", ansiDim, ansiReset)
+		return
+	}
+	if n > len(chat) {
+		n = len(chat)
+	}
+	recent := chat[len(chat)-n:]
+	fmt.Printf("\n%s[last %d messages]%s\n", ansiDim, len(recent), ansiReset)
+	for _, m := range recent {
+		content := strings.TrimSpace(m.Content)
+		if content == "" {
+			continue
+		}
+		if len(content) > 200 {
+			content = content[:200] + "…"
+		}
+		color := ansiDim
+		switch m.Role {
+		case "assistant":
+			color = ansiTeal
+		case "user":
+			color = ansiReset
+		}
+		fmt.Printf("  %s%s:%s %s\n", color, m.Role, ansiReset, content)
+	}
+	fmt.Println()
+}
+
+func numCtx(opts map[string]any) int {
 	if opts == nil {
 		return 0
 	}

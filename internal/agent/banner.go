@@ -9,23 +9,27 @@ import (
 
 // Color variables — set to empty strings by SetPlainMode for script-friendly output.
 var (
-	ansiCyan  = "\033[96m"
-	ansiBlue  = "\033[94m"
-	ansiTeal  = "\033[36m"
-	ansiGreen = "\033[92m"
-	ansiDim   = "\033[2m"
-	ansiReset = "\033[0m"
+	ansiCyan   = "\033[96m"
+	ansiBlue   = "\033[94m"
+	ansiTeal   = "\033[36m"
+	ansiGreen  = "\033[92m"
+	ansiYellow = "\033[33m"
+	ansiRed    = "\033[91m"
+	ansiDim    = "\033[2m"
+	ansiReset  = "\033[0m"
 )
 
 // SetPlainMode disables all ANSI color codes.
 // Triggered by --plain flag or the NO_COLOR environment variable (https://no-color.org).
 func SetPlainMode() {
-	ansiCyan  = ""
-	ansiBlue  = ""
-	ansiTeal  = ""
-	ansiGreen = ""
-	ansiDim   = ""
-	ansiReset = ""
+	ansiCyan   = ""
+	ansiBlue   = ""
+	ansiTeal   = ""
+	ansiGreen  = ""
+	ansiYellow = ""
+	ansiRed    = ""
+	ansiDim    = ""
+	ansiReset  = ""
 }
 
 var logoMini = [6]string{
@@ -47,7 +51,7 @@ var logoAgent = [6]string{
 }
 
 func printBanner(cfg *config.Config) {
-	const version = "v2.5.0"
+	const version = "v2.6.0"
 	const sep = "──────────────────────────────────────────────────"
 
 	fmt.Println()

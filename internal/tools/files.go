@@ -10,8 +10,17 @@ import (
 
 const maxFileBytes = 64 * 1024 // 64 KB; larger files waste context on constrained hardware
 
+func expandPath(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
+
 func ReadFile(path string) (string, error) {
-	clean := filepath.Clean(path)
+	clean := filepath.Clean(expandPath(path))
 	f, err := os.Open(clean)
 	if err != nil {
 		return "", err
@@ -30,7 +39,7 @@ func ReadFile(path string) (string, error) {
 }
 
 func WriteFile(path, content string) (string, error) {
-	clean := filepath.Clean(path)
+	clean := filepath.Clean(expandPath(path))
 	if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 		return "", err
 	}
@@ -41,7 +50,7 @@ func WriteFile(path, content string) (string, error) {
 }
 
 func AppendFile(path, content string) (string, error) {
-	clean := filepath.Clean(path)
+	clean := filepath.Clean(expandPath(path))
 	if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 		return "", err
 	}
@@ -58,7 +67,7 @@ func AppendFile(path, content string) (string, error) {
 }
 
 func ListDir(path string) (string, error) {
-	clean := filepath.Clean(path)
+	clean := filepath.Clean(expandPath(path))
 	if clean == "" {
 		clean = "."
 	}
@@ -69,13 +78,13 @@ func ListDir(path string) (string, error) {
 	var b strings.Builder
 	for _, e := range entries {
 		if e.IsDir() {
-			b.WriteString(e.Name() + "/\n")
+			fmt.Fprintf(&b, "%s/\n", e.Name())
 		} else {
 			info, _ := e.Info()
 			if info != nil {
-				b.WriteString(fmt.Sprintf("%s (%d bytes)\n", e.Name(), info.Size()))
+				fmt.Fprintf(&b, "%s (%d bytes)\n", e.Name(), info.Size())
 			} else {
-				b.WriteString(e.Name() + "\n")
+				fmt.Fprintf(&b, "%s\n", e.Name())
 			}
 		}
 	}

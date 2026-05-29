@@ -13,12 +13,12 @@ import (
 )
 
 const goalSystem = `You are a local automation agent. Complete the given goal step by step using tools.
-To use a tool output ONLY a raw JSON object with no other text:
-{"name":"write_file","arguments":{"path":"p","content":"c"}}
-{"name":"read_file","arguments":{"path":"p"}}
-{"name":"append_file","arguments":{"path":"p","content":"c"}}
+To use a tool output ONLY a raw JSON object — no prose, no markdown, no explanation:
+{"name":"write_file","arguments":{"path":"notes.txt","content":"Hello world"}}
+{"name":"read_file","arguments":{"path":"notes.txt"}}
+{"name":"append_file","arguments":{"path":"notes.txt","content":"extra line"}}
 {"name":"list_dir","arguments":{"path":"."}}
-{"name":"run_command","arguments":{"command":"cmd","args":["arg"]}}
+{"name":"run_command","arguments":{"command":"ls","args":["-la"]}}
 When the goal is fully complete output exactly: DONE: <one sentence summary>`
 
 const maxNoteLen = 800   // chars per individual result before appending to notes

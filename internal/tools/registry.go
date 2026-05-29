@@ -76,11 +76,11 @@ func (r *Registry) Specs() []llm.ToolSpec {
 		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
 			Name:        "run_command",
 			Description: "Run an allowed local shell command.",
-			Parameters: map[string]interface{}{
+			Parameters: map[string]any{
 				"type": "object",
-				"properties": map[string]interface{}{
-					"command": map[string]interface{}{"type": "string"},
-					"args":    map[string]interface{}{"type": "array", "items": map[string]interface{}{"type": "string"}},
+				"properties": map[string]any{
+					"command": map[string]any{"type": "string"},
+					"args":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
 				},
 				"required": []string{"command"},
 			},
@@ -154,12 +154,12 @@ func (r *Registry) allowed(cmd string) bool {
 	return false
 }
 
-func schema(fields map[string]string, required []string) map[string]interface{} {
-	props := map[string]interface{}{}
+func schema(fields map[string]string, required []string) map[string]any {
+	props := map[string]any{}
 	for k, t := range fields {
-		props[k] = map[string]interface{}{"type": t}
+		props[k] = map[string]any{"type": t}
 	}
-	return map[string]interface{}{
+	return map[string]any{
 		"type":       "object",
 		"properties": props,
 		"required":   required,

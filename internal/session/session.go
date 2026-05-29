@@ -15,7 +15,7 @@ type ToolCall struct {
 
 type ToolFunction struct {
 	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 type Session struct {
@@ -70,10 +70,7 @@ func EstimateTokens(msgs []Message) int {
 // DropOldest removes n messages from the start of history (after the system prompt).
 func (s *Session) DropOldest(n int) {
 	start := s.historyStart()
-	drop := n
-	if drop > len(s.Messages)-start {
-		drop = len(s.Messages) - start
-	}
+	drop := min(n, len(s.Messages)-start)
 	if drop > 0 {
 		s.Messages = append(s.Messages[:start], s.Messages[start+drop:]...)
 	}
