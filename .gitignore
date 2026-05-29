@@ -1,3 +1,21 @@
 bin/
-*.py
-patch.go
+*.exe
+*.test
+*.out
+
+# local scratch and generated files
+*.txt
+.env
+
+# editor state
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# session data
+.mini-agent/
