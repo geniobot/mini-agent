@@ -3,14 +3,28 @@ set -euo pipefail
 
 REPO="https://github.com/geniobot/mini-agent/archive/refs/heads/main.tar.gz"
 BINARY="mini-agent"
+VERSION="v2.5.0"
 INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 
-# ── dependency check ─────────────────────────────────────────────────────────
+# ── colors (disabled when NO_COLOR is set or stdout is not a terminal) ────────
+if [ -z "${NO_COLOR:-}" ] && [ "${TERM:-dumb}" != "dumb" ]; then
+  CYN='\033[96m'
+  BLU='\033[94m'
+  TEL='\033[36m'
+  GRN='\033[92m'
+  DIM='\033[2m'
+  RST='\033[0m'
+else
+  CYN='' BLU='' TEL='' GRN='' DIM='' RST=''
+fi
+
+p() { printf "%b\n" "$@"; }
+
+# ── dependency check ──────────────────────────────────────────────────────────
 if ! command -v go &>/dev/null; then
   echo "error: Go 1.22+ is required — https://go.dev/dl/" >&2
   exit 1
 fi
-
 if ! command -v curl &>/dev/null; then
   echo "error: curl is required" >&2
   exit 1
@@ -20,45 +34,90 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-printf 'Downloading... '
+printf "${DIM}Downloading...${RST} "
 curl -fsSL "$REPO" -o "$TMP/src.tar.gz"
 tar -xz -C "$TMP" -f "$TMP/src.tar.gz"
-echo "done"
+printf "${GRN}done${RST}\n"
 
-# Find the extracted directory (works regardless of branch/tag naming)
 SRCDIR=$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -1)
-
 if [ -z "$SRCDIR" ] || [ ! -f "$SRCDIR/go.mod" ]; then
   echo "error: could not find go.mod in extracted archive" >&2
   exit 1
 fi
 
 # ── build ─────────────────────────────────────────────────────────────────────
-printf 'Building...    '
+printf "${DIM}Building...${RST}    "
 (cd "$SRCDIR" && go build -ldflags "-s -w" -o "$TMP/$BINARY" ./cmd/$BINARY)
-echo "done"
+printf "${GRN}done${RST}\n"
 
 # ── install ───────────────────────────────────────────────────────────────────
-printf "Installing to %s... " "$INSTALL_DIR"
+printf "${DIM}Installing...${RST}  "
 mkdir -p "$INSTALL_DIR"
 install -m755 "$TMP/$BINARY" "$INSTALL_DIR/$BINARY"
-echo "done"
+printf "${GRN}done${RST}\n"
 
-# Warn if the install directory is not in PATH
+# ── banner ────────────────────────────────────────────────────────────────────
+SEP="${DIM}  ──────────────────────────────────────────────────${RST}"
+
+echo ""
+p "${CYN}  ███╗   ███╗██╗███╗   ██╗██╗${RST}"
+p "${CYN}  ████╗ ████║██║████╗  ██║██║${RST}"
+p "${CYN}  ██╔████╔██║██║██╔██╗ ██║██║${RST}"
+p "${CYN}  ██║╚██╔╝██║██║██║╚██╗██║██║${RST}"
+p "${CYN}  ██║ ╚═╝ ██║██║██║ ╚████║██║${RST}"
+p "${CYN}  ╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝╚═╝${RST}"
+p "${BLU}   █████╗  ██████╗ ███████╗███╗   ██╗████████╗${RST}"
+p "${BLU}  ██╔══██╗██╔════╝ ██╔════╝████╗  ██║╚══██╔══╝${RST}"
+p "${BLU}  ███████║██║  ███╗█████╗  ██╔██╗ ██║   ██║${RST}"
+p "${BLU}  ██╔══██║██║   ██║██╔══╝  ██║╚██╗██║   ██║${RST}"
+p "${BLU}  ██║  ██║╚██████╔╝███████╗██║ ╚████║   ██║${RST}"
+p "${BLU}  ╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝${RST}"
+echo ""
+p "${DIM}  local · lightweight · fast                      ${VERSION}${RST}"
+p "$SEP"
+p "  ${GRN}✓${RST}  installed ${TEL}mini-agent ${VERSION}${RST}"
+p "     ${DIM}→ $INSTALL_DIR/$BINARY${RST}"
+p "$SEP"
+echo ""
+p "  ${TEL}◆${RST}  Getting started"
+echo ""
+p "     ${DIM}1. Pull a model (if you haven't)${RST}"
+p "        ollama pull qwen2.5-coder:1.5b"
+echo ""
+p "     ${DIM}2. Set up your config${RST}"
+p "        mkdir -p ~/.mini-agent"
+p "        curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml \\"
+p "             -o ~/.mini-agent/config.yaml"
+echo ""
+p "     ${DIM}3. Run${RST}"
+p "        mini-agent"
+echo ""
+p "$SEP"
+p "  ${TEL}◆${RST}  Useful commands inside mini-agent"
+echo ""
+p "     ${DIM}/run <goal>${RST}   run a task autonomously"
+p "     ${DIM}/model <name>${RST} switch model without restarting"
+p "     ${DIM}/status${RST}       show token usage and config"
+p "     ${DIM}/help${RST}         list all commands"
+p "     ${DIM}/exit${RST}         quit"
+echo ""
+p "$SEP"
+p "  ${TEL}◆${RST}  Uninstall"
+echo ""
+p "     rm $INSTALL_DIR/$BINARY"
+p "     rm -rf ~/.mini-agent    ${DIM}# config + session history${RST}"
+echo ""
+p "$SEP"
+echo ""
+
+# ── PATH check ────────────────────────────────────────────────────────────────
 case ":$PATH:" in
   *":$INSTALL_DIR:"*) ;;
-  *) echo ""
-     echo "  note: $INSTALL_DIR is not in your PATH."
-     echo "  Add this to ~/.bashrc or ~/.profile:"
-     echo "    export PATH=\"\$HOME/.local/bin:\$PATH\""
-     ;;
+  *)
+    p "  ${GRN}!${RST}  ${DIM}$INSTALL_DIR is not in your PATH.${RST}"
+    p "     Add this to ${DIM}~/.bashrc${RST} or ${DIM}~/.profile${RST} and restart your shell:"
+    echo ""
+    p "     export PATH=\"\$HOME/.local/bin:\$PATH\""
+    echo ""
+    ;;
 esac
-
-echo ""
-echo "  mini-agent installed. Run: mini-agent"
-echo ""
-echo "  First time? Set up a config:"
-echo "    mkdir -p ~/.mini-agent"
-echo "    curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml \\"
-echo "         -o ~/.mini-agent/config.yaml"
-echo ""
