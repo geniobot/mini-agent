@@ -449,15 +449,20 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 	if strings.HasPrefix(clean, "```") {
 		lines := strings.Split(clean, "\n")
 		if len(lines) >= 3 && strings.HasPrefix(lines[0], "```") && strings.TrimSpace(lines[len(lines)-1]) == "```" {
-			clean = strings.Join(lines[1:len(lines)-1], "\n")
+			clean = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
 		}
 	}
-	start := strings.Index(clean, "{")
-	end := strings.LastIndex(clean, "}")
-	if start < 0 || end < start {
+	// Only parse when the response IS a JSON object, not when it merely contains one.
+	// If the model prefixed its output with prose the system prompt told it not to write,
+	// treat the whole thing as plain text rather than silently executing the embedded JSON.
+	if !strings.HasPrefix(clean, "{") {
 		return nil
 	}
-	candidate := strings.TrimSpace(clean[start : end+1])
+	end := strings.LastIndex(clean, "}")
+	if end < 0 {
+		return nil
+	}
+	candidate := strings.TrimSpace(clean[:end+1])
 	var req fallbackToolRequest
 	if err := json.Unmarshal([]byte(candidate), &req); err != nil {
 		return nil

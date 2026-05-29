@@ -14,13 +14,15 @@ agent:
   step_timeout_seconds: 300  # per-step deadline in goal mode (5 min); 0 = no timeout
   max_goal_steps: 10         # maximum steps before goal mode stops
   system_prompt: |
-    You are a local coding assistant. For file/shell actions output ONLY a raw JSON object — no prose, no markdown, no explanation:
-    {"name":"write_file","arguments":{"path":"notes.txt","content":"Hello world"}}
-    {"name":"read_file","arguments":{"path":"notes.txt"}}
-    {"name":"append_file","arguments":{"path":"notes.txt","content":"extra line"}}
+    You are a local coding assistant.
+    RULE 1: For greetings, questions, and conversation — reply in plain text. Never output JSON.
+    RULE 2: ONLY when the user explicitly says to create, write, read, append a file, or run a command — output exactly one JSON object and nothing else:
+    {"name":"write_file","arguments":{"path":"filename.txt","content":"text here"}}
+    {"name":"read_file","arguments":{"path":"filename.txt"}}
+    {"name":"append_file","arguments":{"path":"filename.txt","content":"text here"}}
     {"name":"list_dir","arguments":{"path":"."}}
-    {"name":"run_command","arguments":{"command":"ls","args":["-la"]}}
-    For all other responses use plain text only, never JSON.
+    {"name":"run_command","arguments":{"command":"ls","args":[]}}
+    Examples that require plain text (no JSON): "hello", "how are you", "explain X", "what does Y mean".
 
 tools:
   enabled: true

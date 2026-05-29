@@ -26,10 +26,12 @@ func TestParseFallbackToolCall(t *testing.T) {
 			wantTool: "read_file",
 		},
 		{
-			name:     "prose before JSON",
-			input:    "I will write the file now.\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"out.txt\",\"content\":\"x\"}}",
-			wantLen:  1,
-			wantTool: "write_file",
+			// prose before JSON is intentionally NOT parsed — the model should only
+			// output bare JSON; prose means it ignored the system prompt, so we
+			// treat the whole response as plain text to avoid silent file operations.
+			name:    "prose before JSON — not parsed",
+			input:   "I will write the file now.\n{\"name\":\"write_file\",\"arguments\":{\"path\":\"out.txt\",\"content\":\"x\"}}",
+			wantLen: 0,
 		},
 		{
 			name:    "empty input",
@@ -98,47 +100,47 @@ func TestToolSummary(t *testing.T) {
 	}{
 		{
 			name: "read_file",
-			tc:   mkCall("read_file", map[string]interface{}{"path": "notes.txt"}),
+			tc:   mkCall("read_file", map[string]any{"path": "notes.txt"}),
 			want: "notes.txt",
 		},
 		{
 			name: "write_file",
-			tc:   mkCall("write_file", map[string]interface{}{"path": "out.txt", "content": "hello"}),
+			tc:   mkCall("write_file", map[string]any{"path": "out.txt", "content": "hello"}),
 			want: "out.txt (5 bytes)",
 		},
 		{
 			name: "append_file",
-			tc:   mkCall("append_file", map[string]interface{}{"path": "log.txt", "content": "line"}),
+			tc:   mkCall("append_file", map[string]any{"path": "log.txt", "content": "line"}),
 			want: "log.txt (4 bytes)",
 		},
 		{
 			name: "list_dir",
-			tc:   mkCall("list_dir", map[string]interface{}{"path": "."}),
+			tc:   mkCall("list_dir", map[string]any{"path": "."}),
 			want: ".",
 		},
 		{
 			name: "run_command with args",
-			tc:   mkCall("run_command", map[string]interface{}{"command": "ls", "args": []interface{}{"-la"}}),
+			tc:   mkCall("run_command", map[string]any{"command": "ls", "args": []any{"-la"}}),
 			want: "ls -la",
 		},
 		{
 			name: "run_command no args",
-			tc:   mkCall("run_command", map[string]interface{}{"command": "pwd"}),
+			tc:   mkCall("run_command", map[string]any{"command": "pwd"}),
 			want: "pwd",
 		},
 		{
 			name: "run_command empty args slice",
-			tc:   mkCall("run_command", map[string]interface{}{"command": "ls", "args": []interface{}{}}),
+			tc:   mkCall("run_command", map[string]any{"command": "ls", "args": []any{}}),
 			want: "ls",
 		},
 		{
 			name: "write_file missing content",
-			tc:   mkCall("write_file", map[string]interface{}{"path": "out.txt"}),
+			tc:   mkCall("write_file", map[string]any{"path": "out.txt"}),
 			want: "out.txt",
 		},
 		{
 			name: "unknown tool",
-			tc:   mkCall("unknown_tool", map[string]interface{}{}),
+			tc:   mkCall("unknown_tool", map[string]any{}),
 			want: "",
 		},
 	}
@@ -153,6 +155,6 @@ func TestToolSummary(t *testing.T) {
 	}
 }
 
-func mkCall(name string, args map[string]interface{}) session.ToolCall {
+func mkCall(name string, args map[string]any) session.ToolCall {
 	return session.ToolCall{Function: session.ToolFunction{Name: name, Arguments: args}}
 }
