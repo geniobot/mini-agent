@@ -5,7 +5,7 @@ REPO="https://github.com/geniobot/mini-agent/archive/refs/heads/main.tar.gz"
 BINARY="mini-agent"
 INSTALL_DIR="${PREFIX:-/usr/local}/bin"
 
-# ── dependency check ────────────────────────────────────────────────────────
+# ── dependency check ─────────────────────────────────────────────────────────
 if ! command -v go &>/dev/null; then
   echo "error: Go 1.22+ is required — https://go.dev/dl/" >&2
   exit 1
@@ -16,21 +16,29 @@ if ! command -v curl &>/dev/null; then
   exit 1
 fi
 
-# ── download ─────────────────────────────────────────────────────────────────
+# ── download ──────────────────────────────────────────────────────────────────
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
 printf 'Downloading... '
-curl -fsSL "$REPO" | tar -xz -C "$TMP"
+curl -fsSL "$REPO" -o "$TMP/src.tar.gz"
+tar -xz -C "$TMP" -f "$TMP/src.tar.gz"
 echo "done"
 
-# ── build ────────────────────────────────────────────────────────────────────
+# Find the extracted directory (works regardless of branch/tag naming)
+SRCDIR=$(find "$TMP" -maxdepth 1 -mindepth 1 -type d | head -1)
+
+if [ -z "$SRCDIR" ] || [ ! -f "$SRCDIR/go.mod" ]; then
+  echo "error: could not find go.mod in extracted archive" >&2
+  exit 1
+fi
+
+# ── build ─────────────────────────────────────────────────────────────────────
 printf 'Building...    '
-cd "$TMP/mini-agent-main"
-go build -ldflags "-s -w" -o "$TMP/$BINARY" ./cmd/$BINARY
+(cd "$SRCDIR" && go build -ldflags "-s -w" -o "$TMP/$BINARY" ./cmd/$BINARY)
 echo "done"
 
-# ── install ──────────────────────────────────────────────────────────────────
+# ── install ───────────────────────────────────────────────────────────────────
 printf "Installing to %s... " "$INSTALL_DIR"
 mkdir -p "$INSTALL_DIR"
 if [ -w "$INSTALL_DIR" ]; then
@@ -41,10 +49,10 @@ fi
 echo "done"
 
 echo ""
-echo "  ✓  mini-agent installed"
-echo "     run: mini-agent"
+echo "  mini-agent installed. Run: mini-agent"
 echo ""
 echo "  First time? Set up a config:"
-echo "     mkdir -p ~/.mini-agent"
-echo "     curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml -o ~/.mini-agent/config.yaml"
+echo "    mkdir -p ~/.mini-agent"
+echo "    curl -fsSL https://raw.githubusercontent.com/geniobot/mini-agent/main/config.yaml \\"
+echo "         -o ~/.mini-agent/config.yaml"
 echo ""
