@@ -30,7 +30,7 @@ Runs comfortably on hardware as old as a 2012 Mac Mini. No Python, no vector dat
 
 ---
 
-![mini-agent terminal screenshot](Screenshot.png)
+![mini-agent terminal screenshot](screenshot-terminal.png)
 
 ---
 
@@ -98,24 +98,34 @@ In multi-step goal execution, each step receives a running `notes` string instea
 
 **Agent capabilities**
 - Streaming chat with persistent rolling context
-- Autonomous goal execution (`/run`) with up to N configurable steps
+- `/goal` — persistent autonomous goal mode: survives restarts, pause/resume, unlimited steps
+- `/run` — quick one-shot goal execution (up to 10 steps)
 - Per-step timeout so slow hardware never hangs indefinitely
-- Loop detection — stops if the same action produces the same result twice
-- Working notes across goal steps — later steps can see results from earlier ones
+- Loop detection — stops if the same action repeats, with progressively smarter tracking
+- Working notes across goal steps — each step sees results from all previous steps
 - Context overflow recovery — trims history and retries automatically
+- Context pressure indicator — prompt turns yellow/red as context fills up
 
 **Tools**
 - `read_file` — read text files (max 64 KB, truncates with notice)
-- `write_file` — write or overwrite files
+- `write_file` — write or overwrite files (with optional overwrite confirmation)
 - `append_file` — append to files without overwriting
 - `list_dir` — list directory contents with file sizes
 - `run_command` — execute allowlisted shell commands with confirmation prompt
+- `web_fetch` — fetch any URL and return readable plain text (HTML stripped, 32 KB cap)
 
 **Memory and context**
 - Session history persists to `~/.mini-agent/session.json` across restarts
+- Goal state persists to `~/.mini-agent/goal.json` — resume after restart
+- Tool call log written to `~/.mini-agent/run.log` (JSON lines, rotates at 10 MB)
 - Token-budget-aware trimming — history is pruned to fit `num_ctx` automatically
 - `/load <file>` injects a file into context in one command
 - `/forget N` removes the last N messages without clearing everything
+- `/history N` shows the last N conversation turns
+
+**Integrations**
+- **Telegram bot** — `mini-agent --telegram` to chat with your agent via Telegram
+- Secure by default: token from env var, allowlist-only access
 
 **Hardware optimizations**
 - `keep_alive` control — unload model from RAM between sessions if memory is tight
@@ -123,12 +133,17 @@ In multi-step goal execution, each step receives a running `notes` string instea
 - All tool output is capped to prevent runaway context growth
 - Configurable threads, context size, and token limits per hardware tier
 
+**Reliability**
+- `--doctor` validates config, Ollama connectivity, and model availability
+- Config validation on startup — bad values reported clearly before connecting
+- Deterministic JSON fallback parser for tool calling on small models
+
 **Developer experience**
 - Professional terminal UI with ANSI colors and live token counter
 - `--plain` / `--quiet` / `NO_COLOR` for clean script output
 - `--model` flag overrides the configured model per invocation
 - Config auto-discovery: `~/.mini-agent/config.yaml` → `./config.yaml`
-- Graceful Ctrl+C — cancels current generation, returns to prompt
+- Graceful Ctrl+C — cancels generation or pauses goal, returns to prompt
 - Single `make install` puts the binary in `/usr/local/bin`
 
 ---
@@ -252,43 +267,58 @@ assistant> This is a Go CLI application that...
 
 ### Goal mode
 
-Use `/run` to give the agent an autonomous task. It works through it step by step, accumulating results in a working notes buffer, and signals completion with `DONE:`.
+mini-agent has two goal modes:
+
+**`/goal` — persistent goal** (recommended for complex tasks)
+
+The agent works toward a long-running objective, saving its state after every step. If you interrupt it (Ctrl+C or restart), it pauses — type `/goal resume` to continue from exactly where it stopped.
 
 ```
-[119/2048 tok] > /run List the Go files in this directory and write a summary of each one to files-summary.txt
+[119/4096 tok] > /goal create a Flask REST API for a todo list with add, list, and delete endpoints
 
-[goal] List the Go files in this directory and write a summary of each one to files-summary.txt
-[max 10 steps — Ctrl+C to abort]
+[◎ goal] create a Flask REST API for a todo list with add, list, and delete endpoints
+[Ctrl+C to pause · /goal clear to stop]
 
+[step 1]
+  [write_file] app.py (1.2 KB) → wrote 1245 bytes to app.py
+
+[step 2]
+  [write_file] requirements.txt (32 bytes) → wrote 32 bytes to requirements.txt
+
+[step 3]
+  [write_file] README.md (420 bytes) → wrote 420 bytes to README.md
+
+[✓ goal achieved] Created Flask REST API with app.py, requirements.txt, and README.md
+```
+
+Goal state and progress notes are saved to `~/.mini-agent/goal.json`. Check status at any time:
+
+```
+> /goal
+  ◎  goal    create a Flask REST API...
+  ◆  status  achieved
+  ◆  steps   3
+  ◆  started 2025-05-29 21:00:00 (2m ago)
+```
+
+**`/run` — quick goal** (for short tasks, max 10 steps)
+
+```
+[119/4096 tok] > /run List the Go files and write a summary to files-summary.txt
+
+[goal] List the Go files...
 [step 1/10]
-
-assistant>
-  [list_dir] cmd/ (4096 bytes)
-  internal/ (4096 bytes)
-  ...
-
+  [list_dir] . → cmd/ internal/ config.yaml ...
 [step 2/10]
-
-assistant>
-  [read_file] package main...
-
-[step 3/10]
-
-assistant>
-  [write_file] wrote 1.2 KB to files-summary.txt
-
-[step 4/10]
-
-assistant> DONE: Listed all Go source files and wrote a one-line summary of each to files-summary.txt.
-
-[✓ done] Listed all Go source files and wrote a one-line summary of each to files-summary.txt.
+  [write_file] files-summary.txt (800 bytes) → wrote 800 bytes
+[✓ done] Listed all Go source files and wrote summaries to files-summary.txt.
 ```
 
-**Goal mode guarantees:**
-- Each step's context is bounded (~500 tokens for notes) regardless of step count
-- If stuck in a loop, it stops with a clear message
-- Ctrl+C cancels cleanly and returns to the prompt
-- A per-step timeout prevents indefinite hangs on slow hardware
+**Both modes guarantee:**
+- Step context is bounded (notes budget) regardless of step count
+- Loop detection stops the agent if it repeats the same action
+- Ctrl+C pauses (`/goal`) or cancels (`/run`) cleanly
+- Per-step timeout prevents indefinite hangs on slow hardware
 
 ### Non-interactive / scripts
 
@@ -338,8 +368,13 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 
 | Command | Description |
 |---|---|
-| `/run <goal>` | Run an autonomous multi-step goal and return `DONE` when complete |
+| `/goal <objective>` | Set a persistent goal and start working — survives restarts |
+| `/goal` | Show current goal status (steps, elapsed, last action) |
+| `/goal resume` | Continue a paused goal from where it left off |
+| `/goal clear` | Stop and discard the current goal |
+| `/run <goal>` | Quick one-shot goal — up to 10 steps, no persistence |
 | `/load <file>` | Inject a file into conversation context |
+| `/history [N]` | Show last N conversation messages (default: 6) |
 | `/model [name]` | Show the current model, or switch to `name` without restarting |
 | `/unload` | Evict the current model from Ollama's RAM to free memory |
 | `/status` | Show model, host, token usage, history depth, and active config |
@@ -361,6 +396,8 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `--no-save` | `false` | Do not write session history to disk on exit |
 | `--plain` | `false` | Disable ANSI color codes (also triggered by `NO_COLOR=1`) |
 | `--quiet` | `false` | Suppress all decoration — only the final answer reaches stdout |
+| `--doctor` | — | Validate config, check Ollama connectivity, verify model — then exit |
+| `--telegram` | — | Start Telegram bot mode (requires `TELEGRAM_BOT_TOKEN` env var) |
 
 **Config file search order:** `--config` flag → `~/.mini-agent/config.yaml` → `./config.yaml`
 
@@ -390,7 +427,8 @@ agent:
   max_history: 8                  # Maximum conversation pairs kept in rolling context.
                                   # Older messages are dropped automatically.
   step_timeout_seconds: 300       # Maximum seconds per goal step. 0 = no timeout.
-  max_goal_steps: 10              # Maximum steps before goal mode stops with a notice.
+  max_goal_steps: 10              # Maximum steps for /run before it stops with a notice.
+  goal_max_steps: 50              # Maximum steps for /goal before it pauses. 0 = unlimited.
 
 tools:
   enabled: true
@@ -402,6 +440,8 @@ tools:
   enable_append_file: true
   enable_list_dir: true
   enable_run_command: true
+  enable_web_fetch: false         # Fetch URLs and return readable plain text.
+  web_fetch_timeout_seconds: 30   # Per-request timeout for web_fetch.
   confirm_run_command: true       # Prompt [y/N] before every shell command execution.
                                   # Strongly recommended to keep true.
   allowed_commands:               # Explicit allowlist for run_command.
@@ -414,6 +454,12 @@ tools:
     - tail
     - sed
     - awk
+
+# Telegram bot — run with: mini-agent --telegram
+# Set token via: export TELEGRAM_BOT_TOKEN="your:token"
+# Do NOT paste your token here if you commit this file.
+telegram:
+  allowed_chat_ids: []            # Your Telegram chat ID(s). Empty = deny all.
 ```
 
 ### Chat-only mode
@@ -433,15 +479,22 @@ Works well with general-purpose models like `gemma2:2b` or `llama3.2:1b`.
 
 All tools are available in both chat mode and goal mode. The agent selects them based on context.
 
-| Tool | Description | Limit | Config key |
-|---|---|---|---|
-| `read_file` | Read a UTF-8 text file | 64 KB (truncates with notice) | `enable_read_file` |
-| `write_file` | Write or overwrite a text file | — | `enable_write_file` |
-| `append_file` | Append text to a file, creating if needed | — | `enable_append_file` |
-| `list_dir` | List directory contents with sizes | — | `enable_list_dir` |
-| `run_command` | Run an allowlisted shell command | 4 KB output | `enable_run_command` |
+| Tool | Description | Limit | Config key | Default |
+|---|---|---|---|---|
+| `read_file` | Read a UTF-8 text file | 64 KB (truncates with notice) | `enable_read_file` | on |
+| `write_file` | Write or overwrite a text file | — | `enable_write_file` | on |
+| `append_file` | Append text to a file, creating if needed | — | `enable_append_file` | on |
+| `list_dir` | List directory contents with sizes | — | `enable_list_dir` | on |
+| `run_command` | Run an allowlisted shell command | 4 KB output | `enable_run_command` | on |
+| `web_fetch` | Fetch a URL, strip HTML, return readable text | 32 KB | `enable_web_fetch` | **off** |
 
-Shell output exceeding 4 KB is truncated with a `[output truncated at 4KB]` notice so the model knows it didn't see the full result.
+Shell output exceeding 4 KB and web content exceeding 32 KB are truncated with a notice so the model knows it didn't see the full result.
+
+`web_fetch` uses only stdlib `net/http` — no external browser or Playwright required. Enable it in config:
+```yaml
+tools:
+  enable_web_fetch: true
+```
 
 ---
 
@@ -485,6 +538,45 @@ The `[119/2048 tok]` counter at the prompt shows token usage in real time. If it
 
 ---
 
+## Telegram Bot
+
+mini-agent can run as a personal Telegram bot — you send it messages and it responds via the agent, with full tool access.
+
+**Setup:**
+
+1. Create a bot via [@BotFather](https://t.me/BotFather) and copy the token
+2. Set the token as an environment variable (**never put it in config.yaml**)
+3. Add your Telegram chat ID to the config
+4. Start bot mode
+
+```bash
+# Step 2 — set token (add to ~/.bashrc or ~/.zshrc for persistence)
+export TELEGRAM_BOT_TOKEN="123456789:ABC-your-token-here"
+
+# Step 3 — find your chat ID: start the bot, send it a message,
+# your chat ID appears in the startup log. Then add it to config:
+#   telegram:
+#     allowed_chat_ids: [YOUR_CHAT_ID]
+
+# Step 4 — start
+mini-agent --telegram
+```
+
+**Security model:**
+- Token is read from `TELEGRAM_BOT_TOKEN` env var (config file fallback, but not recommended)
+- `allowed_chat_ids` is required and non-empty — empty list refuses all messages
+- Unknown senders receive a polite rejection; their chat ID is logged to stderr
+- The bot only processes text messages from your allowlist
+
+**What you can do in Telegram:**
+- Full chat with the agent
+- `/goal <objective>` — start a persistent goal
+- `/run <task>` — quick goal mode
+- `/status`, `/help`, `/history` — same commands as the REPL
+- Any file or shell tool the agent has access to
+
+---
+
 ## Session Persistence
 
 Conversation history is saved automatically to `~/.mini-agent/session.json` when you `/exit`. It is restored on the next startup. The rolling context window and token budget keep the file small indefinitely — it will never grow without bound.
@@ -496,7 +588,15 @@ mini-agent --no-save        # runs normally but does not write to disk on exit
 mini-agent --run "..." --fresh --no-save   # fully ephemeral one-off run
 ```
 
-Goal mode (`/run` and `--run`) does not write to the session — goal steps use isolated context that isn't mixed into your chat history.
+Goal results (both `/goal` and `/run`) are appended to the session history as a summary message — visible in `/history` the next time you start.
+
+**Persistent files written by mini-agent:**
+
+| File | Contents |
+|---|---|
+| `~/.mini-agent/session.json` | Rolling conversation history |
+| `~/.mini-agent/goal.json` | Active goal state (objective, step notes, status) |
+| `~/.mini-agent/run.log` | JSON-lines tool call audit log (rotates at 10 MB) |
 
 ---
 
@@ -506,27 +606,37 @@ Goal mode (`/run` and `--run`) does not write to the session — goal steps use 
 mini-agent/
 ├── cmd/
 │   └── mini-agent/
-│       └── main.go           # Entry point, CLI flags, session wiring
+│       └── main.go           # Entry point, CLI flags, session + logger wiring
 ├── internal/
 │   ├── agent/
 │   │   ├── banner.go         # Terminal banner, ANSI colors, SetPlainMode
-│   │   ├── goal.go           # Autonomous goal loop, working notes, loop detection
+│   │   ├── doctor.go         # --doctor: config + Ollama + model health check
+│   │   ├── goal.go           # /run quick goal loop, working notes, loop detection
+│   │   ├── goalcmd.go        # /goal persistent goal: state machine, pause/resume
 │   │   └── loop.go           # Interactive REPL, command dispatch, signal handling
 │   ├── config/
-│   │   └── config.go         # Config struct, YAML loading, auto-discovery
+│   │   └── config.go         # Config struct, validation, YAML loading, auto-discovery
 │   ├── llm/
 │   │   ├── client.go         # Client interface, ModelLister, Unloader interfaces
 │   │   └── ollama.go         # Ollama HTTP client (streaming, ListModels, Unload, Ping)
+│   ├── runlog/
+│   │   └── runlog.go         # JSON-lines tool call audit log, 10 MB rotation
 │   ├── session/
 │   │   ├── session.go        # Message history, token budget, compaction
 │   │   └── persist.go        # Save/load session.json
+│   ├── telegram/
+│   │   ├── telegram.go       # Telegram Bot API client (stdlib only)
+│   │   └── mode.go           # Bot polling loop, message routing, typing indicator
 │   └── tools/
 │       ├── files.go          # read_file, write_file, append_file, list_dir
 │       ├── limit.go          # Output cap buffer
-│       ├── registry.go       # Tool registration and dispatch
-│       └── shell.go          # run_command with timeout
+│       ├── registry.go       # Tool registration, dispatch, Specs()
+│       ├── shell.go          # run_command with timeout
+│       └── web.go            # web_fetch: HTTP GET + HTML strip + 32 KB cap
 ├── config.yaml               # Default configuration (copy to ~/.mini-agent/ for global use)
 ├── Makefile                  # build, install, uninstall, run, test
+├── PLAN.md                   # Engineering roadmap and architecture decisions
+├── TODO.md                   # Prioritised task list
 ├── CLAUDE.md                 # Architecture guidance for AI-assisted development
 └── LICENSE                   # MIT
 ```
