@@ -24,8 +24,10 @@ type OpenAIClient struct {
 }
 
 func NewOpenAI(baseURL, apiKey, model string) *OpenAIClient {
+	base := strings.TrimRight(baseURL, "/")
+	base = strings.TrimSuffix(base, "/v1") // normalise: client appends /v1/chat/completions
 	return &OpenAIClient{
-		BaseURL:    strings.TrimRight(baseURL, "/"),
+		BaseURL:    base,
 		APIKey:     apiKey,
 		Model:      model,
 		HTTPClient: &http.Client{Timeout: 0},
