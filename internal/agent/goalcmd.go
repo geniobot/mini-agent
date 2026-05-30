@@ -28,12 +28,15 @@ List directory:
 {"name":"list_dir","arguments":{"path":"."}}
 Run a command:
 {"name":"run_command","arguments":{"command":"ls","args":[]}}
+Fetch a URL:
+{"name":"web_fetch","arguments":{"url":"https://example.com","timeout_seconds":30}}
 
 Rules:
-- Always call a tool first. Never output DONE on the first step.
-- After each tool result, either call another tool or signal completion.
-- Only output DONE when every part of the goal is fully complete and verified.
-- If a previous attempt did not work, try a different approach instead of repeating.
+- Always call a tool on the very first step. Never output DONE on the first step.
+- If the goal requires multiple files, write EACH file one per step before outputting DONE.
+- Do not output DONE after writing only one file when the goal requires three.
+- Only output DONE when you have actually completed every part of the goal.
+- If a step produced no result, try a different approach on the next step.
 - Completion signal: DONE: <one sentence summary of what was accomplished>`
 
 const (
@@ -297,9 +300,15 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 		}
 
 		if len(resp.ToolCalls) == 0 {
+			// Model produced no tool call — record it so countToolCalls stays accurate
+			// and the next step's directive becomes more urgent.
 			text := truncStr(strings.TrimSpace(resp.Content), goalStepNoteLen)
-			g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [reasoning]", g.Steps), text)
-			g.LastReason = "reasoning step — no tool called"
+			if text == "" {
+				text = "(no action taken)"
+			}
+			g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [no tool]", g.Steps), text)
+			g.LastReason = "no tool called — will retry"
+			l.printf("  %s[step %d produced no tool call — retrying]%s\n", ansiDim, g.Steps, ansiReset)
 			g.UpdatedAt = time.Now()
 			saveGoalState(statePath, g)
 			continue
@@ -371,12 +380,35 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 
 func buildPersistentGoalPrompt(g *GoalState) string {
 	if g.Steps == 1 {
-		return "Goal: " + g.Objective + "\n\nCall a tool to start."
+		return "Goal: " + g.Objective + "\n\nCall a tool now to start. Do not output DONE yet."
 	}
-	return fmt.Sprintf(
-		"Goal: %s\n\nProgress so far:\n%s\nCall another tool to continue, or output DONE: <summary> only when every part of the goal is fully complete.",
-		g.Objective, g.Notes,
-	)
+	calls := countToolCalls(g.Notes)
+	var directive string
+	switch {
+	case calls == 0:
+		directive = "You have not called any tools yet. You MUST call a tool on this step. Do not output DONE."
+	case calls == 1:
+		directive = "You have completed 1 action so far. If the goal requires more files or steps, continue working — call another tool. Only output DONE: <summary> when every part of the goal is fully complete."
+	default:
+		directive = fmt.Sprintf("You have completed %d actions so far. Call another tool to continue, or output DONE: <summary> only when every part of the goal is fully complete.", calls)
+	}
+	return fmt.Sprintf("Goal: %s\n\nProgress so far:\n%s\n%s", g.Objective, g.Notes, directive)
+}
+
+// countToolCalls returns the number of steps that actually executed a tool
+// (not counting reasoning-only steps or denied steps).
+func countToolCalls(notes string) int {
+	tools := []string{"[write_file]", "[read_file]", "[append_file]", "[list_dir]", "[run_command]", "[web_fetch]"}
+	count := 0
+	for _, line := range strings.Split(notes, "\n") {
+		for _, t := range tools {
+			if strings.Contains(line, t) {
+				count++
+				break
+			}
+		}
+	}
+	return count
 }
 
 func appendGoalNotes(notes, label, result string) string {
