@@ -142,6 +142,7 @@ In multi-step goal execution, each step receives a running `notes` string instea
 - Configurable threads, context size, and token limits per hardware tier
 
 **Reliability**
+- `--setup` interactive wizard — switch providers (Groq, OpenAI, OpenRouter, Ollama) in seconds
 - `--doctor` validates config, Ollama connectivity, and model availability
 - Config validation on startup — bad values reported clearly before connecting
 - Deterministic JSON fallback parser for tool calling on small models
@@ -405,6 +406,7 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `--no-save` | `false` | Do not write session history to disk on exit |
 | `--plain` | `false` | Disable ANSI color codes (also triggered by `NO_COLOR=1`) |
 | `--quiet` | `false` | Suppress all decoration — only the final answer reaches stdout |
+| `--setup` | — | Interactive wizard: pick a provider, enter API key, update config — then exit |
 | `--doctor` | — | Validate config, check Ollama connectivity, verify model — then exit |
 | `--telegram` | — | Start Telegram bot mode (requires `TELEGRAM_BOT_TOKEN` env var) |
 | `--no-context` | `false` | Skip auto-loading `CONTEXT.md` from the working directory |
