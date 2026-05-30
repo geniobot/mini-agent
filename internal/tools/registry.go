@@ -93,6 +93,13 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			Parameters:  schema(map[string]string{"url": "string", "timeout_seconds": "integer"}, []string{"url"}),
 		}})
 	}
+	if r.cfg.EnableSearchFiles {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "search_files",
+			Description: "Search for a text pattern across all files under a directory (case-insensitive, grep-style output).",
+			Parameters:  schema(map[string]string{"pattern": "string", "path": "string", "max_results": "integer"}, []string{"pattern"}),
+		}})
+	}
 	return specs
 }
 
@@ -143,6 +150,19 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			a.TimeoutSeconds = r.cfg.WebFetchTimeoutSecs
 		}
 		return WebFetch(a.URL, a.TimeoutSeconds)
+	case "search_files":
+		var a struct {
+			Pattern    string `json:"pattern"`
+			Path       string `json:"path"`
+			MaxResults int    `json:"max_results"`
+		}
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		if a.Path == "" {
+			a.Path = "."
+		}
+		return SearchFiles(a.Pattern, a.Path, a.MaxResults)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

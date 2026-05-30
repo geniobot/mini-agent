@@ -20,9 +20,16 @@ func main() {
 	quiet := flag.Bool("quiet", false, "suppress all decoration; only emit the final answer (implies --plain)")
 	fresh := flag.Bool("fresh", false, "start with empty session, skip loading saved history")
 	noSave := flag.Bool("no-save", false, "do not save session on exit")
-	doctor    := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
+	doctor       := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
 	telegramMode := flag.Bool("telegram", false, "start Telegram bot mode (requires TELEGRAM_BOT_TOKEN env var)")
+	noContext    := flag.Bool("no-context", false, "skip loading CONTEXT.md from the working directory")
+	versionFlag  := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(agent.Version)
+		return
+	}
 
 	if *quiet || *plain || os.Getenv("NO_COLOR") != "" {
 		agent.SetPlainMode()
@@ -83,6 +90,11 @@ func main() {
 		if !*noSave && *runGoal == "" {
 			loop.SetSavePath(savePath)
 		}
+	}
+
+	// Inject CONTEXT.md if present in the working directory.
+	if !*noContext {
+		loop.InjectContextFile()
 	}
 
 	if *runGoal != "" {

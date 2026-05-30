@@ -23,15 +23,16 @@ import (
 )
 
 type Loop struct {
-	cfg      *config.Config
-	client   llm.Client
-	session  *session.Session
-	registry *tools.Registry
-	maxCtx   int
-	savePath string         // empty = no session persistence
-	quiet    bool           // suppress decoration; only emit clean output
-	logger   *runlog.Logger // nil = no run log
-	goal     *GoalState     // non-nil while a /goal is active or paused
+	cfg         *config.Config
+	client      llm.Client
+	session     *session.Session
+	registry    *tools.Registry
+	maxCtx      int
+	savePath    string         // empty = no session persistence
+	quiet       bool           // suppress decoration; only emit clean output
+	logger      *runlog.Logger // nil = no run log
+	goal        *GoalState     // non-nil while a /goal is active or paused
+	contextFile string         // set when CONTEXT.md is loaded; printed in startup banner
 }
 
 type fallbackToolRequest struct {
@@ -80,7 +81,10 @@ func (l *Loop) Run() error {
 	if !l.quiet {
 		printBanner(l.cfg)
 		l.pingOllama(true) //nolint:errcheck — error printed inside; we continue to REPL
-		l.showGoalBanner() // show paused-goal notice if one exists
+		if l.contextFile != "" {
+			fmt.Printf("  %s◆%s  context  %s\n\n", ansiTeal, ansiReset, l.contextFile)
+		}
+		l.showGoalBanner()
 	}
 
 	// Persist session on clean exit.
@@ -140,6 +144,9 @@ func (l *Loop) Run() error {
 			continue
 		case input == "/unload":
 			l.unloadModel()
+			continue
+		case input == "/models":
+			l.printModels()
 			continue
 		case input == "/model":
 			fmt.Printf("  current model: %s\n", l.cfg.Ollama.Model)
@@ -214,6 +221,7 @@ func (l *Loop) printHelp() {
 		{"/goal resume", "continue a paused goal"},
 		{"/goal clear", "stop and discard the current goal"},
 		{"/run <goal>", "run a quick one-shot goal (max 10 steps)"},
+		{"/models", "list all models available in Ollama"},
 		{"/load <file>", "inject a file into conversation context"},
 		{"/history [N]", "show last N messages from session (default 6)"},
 		{"/model [name]", "show or switch the active model"},
@@ -495,7 +503,7 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 		return nil
 	}
 	switch req.Name {
-	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch":
+	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files":
 		var argsMap map[string]any
 		_ = json.Unmarshal(req.Arguments, &argsMap)
 		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
@@ -618,6 +626,57 @@ func (l *Loop) HandleMsg(ctx context.Context, input string) (string, error) {
 		}
 	}
 	return "", nil
+}
+
+// InjectContextFile reads CONTEXT.md (or .mini-agent/CONTEXT.md) from the working
+// directory and injects it into the session as a user/assistant pair so the model
+// always has project context without the user needing to /load it manually.
+func (l *Loop) InjectContextFile() {
+	for _, p := range []string{"CONTEXT.md", ".mini-agent/CONTEXT.md"} {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			continue
+		}
+		text := strings.TrimSpace(string(b))
+		if text == "" {
+			continue
+		}
+		if len(text) > 4096 {
+			text = text[:4096] + "\n[truncated: CONTEXT.md exceeds 4 KB]"
+		}
+		l.session.Add("user", "Project context (CONTEXT.md):\n\n"+text)
+		l.session.Add("assistant", "Understood, I have the project context.")
+		tokens := session.EstimateTokens([]session.Message{{Content: text}})
+		l.contextFile = fmt.Sprintf("%s (~%d tokens)", p, tokens)
+		return
+	}
+}
+
+// printModels lists all models available in the configured Ollama instance.
+func (l *Loop) printModels() {
+	ml, ok := l.client.(llm.ModelLister)
+	if !ok {
+		l.printf("%s[model listing not supported by this backend]%s\n", ansiDim, ansiReset)
+		return
+	}
+	models, err := ml.ListModels()
+	if err != nil {
+		fmt.Printf("[error] %v\n", err)
+		return
+	}
+	if len(models) == 0 {
+		l.printf("%s[no models found — run: ollama pull <model>]%s\n", ansiDim, ansiReset)
+		return
+	}
+	fmt.Printf("\n%s[%d models available]%s\n", ansiDim, len(models), ansiReset)
+	for _, m := range models {
+		if m == l.cfg.Ollama.Model {
+			fmt.Printf("  %s●%s %s %s(active)%s\n", ansiTeal, ansiReset, m, ansiDim, ansiReset)
+		} else {
+			fmt.Printf("  %s·%s %s\n", ansiDim, ansiReset, m)
+		}
+	}
+	fmt.Println()
 }
 
 // showGoalBanner checks for a persisted goal and prints a notice if one is paused.

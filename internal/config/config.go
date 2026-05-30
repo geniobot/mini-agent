@@ -42,6 +42,7 @@ type ToolsConfig struct {
 	EnableListDir        bool     `yaml:"enable_list_dir"`
 	EnableRunCmd         bool     `yaml:"enable_run_command"`
 	EnableWebFetch       bool     `yaml:"enable_web_fetch"`
+	EnableSearchFiles    bool     `yaml:"enable_search_files"`
 	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
 	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`
 	AllowedCommands      []string `yaml:"allowed_commands"`
@@ -101,7 +102,8 @@ func Load(path string) (*Config, error) {
 	}
 	if !cfg.Tools.EnableReadFile && !cfg.Tools.EnableWriteFile &&
 		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir &&
-		!cfg.Tools.EnableRunCmd && !cfg.Tools.EnableWebFetch {
+		!cfg.Tools.EnableRunCmd && !cfg.Tools.EnableWebFetch &&
+		!cfg.Tools.EnableSearchFiles {
 		cfg.Tools.Enabled = false
 	}
 	if cfg.Tools.WebFetchTimeoutSecs <= 0 {

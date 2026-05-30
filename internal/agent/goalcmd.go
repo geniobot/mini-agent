@@ -30,6 +30,8 @@ Run a command:
 {"name":"run_command","arguments":{"command":"ls","args":[]}}
 Fetch a URL:
 {"name":"web_fetch","arguments":{"url":"https://example.com","timeout_seconds":30}}
+Search for text in files:
+{"name":"search_files","arguments":{"pattern":"TODO","path":"."}}
 
 Rules:
 - Always call a tool on the very first step. Never output DONE on the first step.

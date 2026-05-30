@@ -37,7 +37,11 @@ agent:
     Fetch a web page or URL:
     {"name":"web_fetch","arguments":{"url":"https://example.com","timeout_seconds":30}}
 
-    Use write_file when asked to: create, write, make, generate, save, build any file — including Python scripts, bash scripts, Makefiles, configs, and plain text.
+    Search for text across files:
+    {"name":"search_files","arguments":{"pattern":"TODO","path":"."}}
+
+    Use write_file when asked to: create, write, make, generate, save, build any file.
+    Use search_files when asked to: find, search, grep, look for text in files.
     Use run_command when asked to: run, execute, do, try any shell command.
     Use web_fetch when asked to: fetch, visit, browse, scrape, read any URL or website.
     Use plain text when: greeting, explaining, answering a question, describing something.
@@ -52,6 +56,7 @@ tools:
   enable_run_command: true
   enable_web_fetch: false       # set true to allow the agent to fetch URLs
   web_fetch_timeout_seconds: 30 # per-request timeout for web_fetch
+  enable_search_files: true     # search for text across files (pure Go, no grep needed)
   confirm_run_command: true
   confirm_write_file: false     # set true to prompt before overwriting existing files
   allowed_commands:

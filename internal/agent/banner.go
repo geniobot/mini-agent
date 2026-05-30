@@ -50,8 +50,11 @@ var logoAgent = [6]string{
 	`╚═╝  ╚═╝ ╚═════╝ ╚══════╝╚═╝  ╚═══╝   ╚═╝  `,
 }
 
+// Version is the current release — used in the banner and --version flag.
+const Version = "v2.6.0"
+
 func printBanner(cfg *config.Config) {
-	const version = "v2.6.0"
+	const version = Version
 	const sep = "──────────────────────────────────────────────────"
 
 	fmt.Println()
