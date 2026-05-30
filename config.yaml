@@ -34,8 +34,12 @@ agent:
     Run a shell command:
     {"name":"run_command","arguments":{"command":"ls","args":["-la"]}}
 
+    Fetch a web page or URL:
+    {"name":"web_fetch","arguments":{"url":"https://example.com","timeout_seconds":30}}
+
     Use write_file when asked to: create, write, make, generate, save, build any file — including Python scripts, bash scripts, Makefiles, configs, and plain text.
     Use run_command when asked to: run, execute, do, try any shell command.
+    Use web_fetch when asked to: fetch, visit, browse, scrape, read any URL or website.
     Use plain text when: greeting, explaining, answering a question, describing something.
 
 tools:
@@ -46,8 +50,10 @@ tools:
   enable_append_file: true
   enable_list_dir: true
   enable_run_command: true
+  enable_web_fetch: false       # set true to allow the agent to fetch URLs
+  web_fetch_timeout_seconds: 30 # per-request timeout for web_fetch
   confirm_run_command: true
-  confirm_write_file: false   # set true to prompt before overwriting existing files
+  confirm_write_file: false     # set true to prompt before overwriting existing files
   allowed_commands:
     - cat
     - ls
@@ -58,3 +64,12 @@ tools:
     - tail
     - sed
     - awk
+
+# Telegram bot mode — run with: mini-agent --telegram
+# SECURITY: do NOT put your bot token here. Use the TELEGRAM_BOT_TOKEN env var.
+#   export TELEGRAM_BOT_TOKEN="your:token"
+#   mini-agent --telegram
+# To find your chat ID: message your bot, then check the update logs printed on startup.
+telegram:
+  allowed_chat_ids: []  # REQUIRED: add your Telegram chat ID(s) here, e.g. [123456789]
+                        # Empty = deny all incoming messages (safe default)

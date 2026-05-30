@@ -86,6 +86,13 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			},
 		}})
 	}
+	if r.cfg.EnableWebFetch {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "web_fetch",
+			Description: "Fetch a URL and return its content as plain text (HTML stripped).",
+			Parameters:  schema(map[string]string{"url": "string", "timeout_seconds": "integer"}, []string{"url"}),
+		}})
+	}
 	return specs
 }
 
@@ -124,6 +131,18 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			return "", fmt.Errorf("command not allowed: %s", a.Command)
 		}
 		return RunCommand(a.Command, a.Args)
+	case "web_fetch":
+		var a struct {
+			URL            string `json:"url"`
+			TimeoutSeconds int    `json:"timeout_seconds"`
+		}
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		if a.TimeoutSeconds <= 0 {
+			a.TimeoutSeconds = r.cfg.WebFetchTimeoutSecs
+		}
+		return WebFetch(a.URL, a.TimeoutSeconds)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

@@ -10,9 +10,10 @@ import (
 )
 
 type Config struct {
-	Ollama OllamaConfig `yaml:"ollama"`
-	Agent  AgentConfig  `yaml:"agent"`
-	Tools  ToolsConfig  `yaml:"tools"`
+	Ollama   OllamaConfig   `yaml:"ollama"`
+	Agent    AgentConfig    `yaml:"agent"`
+	Tools    ToolsConfig    `yaml:"tools"`
+	Telegram TelegramConfig `yaml:"telegram"`
 }
 
 type OllamaConfig struct {
@@ -33,16 +34,27 @@ type AgentConfig struct {
 }
 
 type ToolsConfig struct {
-	Enabled          bool     `yaml:"enabled"`
-	UseNativeTools   bool     `yaml:"use_native_tools"`
-	EnableReadFile   bool     `yaml:"enable_read_file"`
-	EnableWriteFile  bool     `yaml:"enable_write_file"`
-	EnableAppendFile bool     `yaml:"enable_append_file"`
-	EnableListDir    bool     `yaml:"enable_list_dir"`
-	EnableRunCmd     bool     `yaml:"enable_run_command"`
-	ConfirmRunCmd    bool     `yaml:"confirm_run_command"`
-	ConfirmWriteFile bool     `yaml:"confirm_write_file"`
-	AllowedCommands  []string `yaml:"allowed_commands"`
+	Enabled              bool     `yaml:"enabled"`
+	UseNativeTools       bool     `yaml:"use_native_tools"`
+	EnableReadFile       bool     `yaml:"enable_read_file"`
+	EnableWriteFile      bool     `yaml:"enable_write_file"`
+	EnableAppendFile     bool     `yaml:"enable_append_file"`
+	EnableListDir        bool     `yaml:"enable_list_dir"`
+	EnableRunCmd         bool     `yaml:"enable_run_command"`
+	EnableWebFetch       bool     `yaml:"enable_web_fetch"`
+	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
+	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`
+	AllowedCommands      []string `yaml:"allowed_commands"`
+	WebFetchTimeoutSecs  int      `yaml:"web_fetch_timeout_seconds"`
+}
+
+// TelegramConfig holds settings for the optional Telegram bot mode.
+// SECURITY: Never put your bot token in config.yaml — use the
+// TELEGRAM_BOT_TOKEN environment variable instead.
+type TelegramConfig struct {
+	Enabled        bool    `yaml:"enabled"`
+	BotToken       string  `yaml:"bot_token"`        // prefer TELEGRAM_BOT_TOKEN env var
+	AllowedChatIDs []int64 `yaml:"allowed_chat_ids"` // required; empty = deny all
 }
 
 // FindConfig returns the config path to use, checking in priority order:
@@ -88,8 +100,17 @@ func Load(path string) (*Config, error) {
 		cfg.Agent.GoalMaxSteps = 50
 	}
 	if !cfg.Tools.EnableReadFile && !cfg.Tools.EnableWriteFile &&
-		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir && !cfg.Tools.EnableRunCmd {
+		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir &&
+		!cfg.Tools.EnableRunCmd && !cfg.Tools.EnableWebFetch {
 		cfg.Tools.Enabled = false
+	}
+	if cfg.Tools.WebFetchTimeoutSecs <= 0 {
+		cfg.Tools.WebFetchTimeoutSecs = 30
+	}
+	// Bot token from environment variable takes precedence over config file.
+	// This keeps credentials out of version-controlled files.
+	if envToken := os.Getenv("TELEGRAM_BOT_TOKEN"); envToken != "" {
+		cfg.Telegram.BotToken = envToken
 	}
 	return &cfg, nil
 }

@@ -9,6 +9,7 @@ import (
 	"mini-agent/internal/config"
 	"mini-agent/internal/runlog"
 	"mini-agent/internal/session"
+	"mini-agent/internal/telegram"
 )
 
 func main() {
@@ -19,7 +20,8 @@ func main() {
 	quiet := flag.Bool("quiet", false, "suppress all decoration; only emit the final answer (implies --plain)")
 	fresh := flag.Bool("fresh", false, "start with empty session, skip loading saved history")
 	noSave := flag.Bool("no-save", false, "do not save session on exit")
-	doctor := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
+	doctor    := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
+	telegramMode := flag.Bool("telegram", false, "start Telegram bot mode (requires TELEGRAM_BOT_TOKEN env var)")
 	flag.Parse()
 
 	if *quiet || *plain || os.Getenv("NO_COLOR") != "" {
@@ -38,6 +40,15 @@ func main() {
 
 	if *doctor {
 		agent.RunDoctor(cfg)
+		return
+	}
+
+	if *telegramMode {
+		loop := agent.New(cfg)
+		if err := telegram.Run(cfg.Telegram.BotToken, cfg.Telegram.AllowedChatIDs, loop); err != nil {
+			fmt.Fprintf(os.Stderr, "telegram error: %v\n", err)
+			os.Exit(1)
+		}
 		return
 	}
 

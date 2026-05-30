@@ -495,7 +495,7 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 		return nil
 	}
 	switch req.Name {
-	case "read_file", "write_file", "append_file", "list_dir", "run_command":
+	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch":
 		var argsMap map[string]any
 		_ = json.Unmarshal(req.Arguments, &argsMap)
 		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
@@ -596,6 +596,28 @@ func (l *Loop) printHistory(n int) {
 		fmt.Printf("  %s%s:%s %s\n", color, m.Role, ansiReset, content)
 	}
 	fmt.Println()
+}
+
+// HandleMsg processes a single user message and returns the assistant response text.
+// It is used by non-interactive frontends such as the Telegram bot.
+// Quiet mode is engaged internally so streaming is suppressed; the response
+// is read from the session after handle() returns.
+func (l *Loop) HandleMsg(ctx context.Context, input string) (string, error) {
+	before := len(l.session.Messages)
+	prevQuiet := l.quiet
+	l.quiet = true
+	err := l.handle(ctx, input)
+	l.quiet = prevQuiet
+	if err != nil {
+		return "", err
+	}
+	msgs := l.session.Snapshot()
+	for i := len(msgs) - 1; i >= before; i-- {
+		if msgs[i].Role == "assistant" && msgs[i].Content != "" {
+			return msgs[i].Content, nil
+		}
+	}
+	return "", nil
 }
 
 // showGoalBanner checks for a persisted goal and prints a notice if one is paused.
