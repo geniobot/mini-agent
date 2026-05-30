@@ -109,8 +109,9 @@ In multi-step goal execution, each step receives a running `notes` string instea
 - Context pressure indicator — prompt turns yellow/red as context fills up
 
 **Tools**
-- `read_file` — read text files (max 64 KB, truncates with notice)
+- `read_file` — read text files (max 64 KB; optional offset/limit for line ranges)
 - `write_file` — write or overwrite files (with optional overwrite confirmation)
+- `edit_file` — find-and-replace edits on existing files (no full rewrite needed)
 - `append_file` — append to files without overwriting
 - `list_dir` — list directory contents with file sizes
 - `run_command` — execute allowlisted shell commands with confirmation prompt
@@ -446,6 +447,7 @@ tools:
                                   # for 1.5B–3B models — the JSON fallback is more stable.
   enable_read_file: true
   enable_write_file: true
+  enable_edit_file: true          # find-and-replace edits on existing files
   enable_append_file: true
   enable_list_dir: true
   enable_run_command: true
@@ -494,8 +496,9 @@ All tools are available in both chat mode and goal mode. The agent selects them 
 
 | Tool | Description | Limit | Config key | Default |
 |---|---|---|---|---|
-| `read_file` | Read a UTF-8 text file | 64 KB (truncates with notice) | `enable_read_file` | on |
+| `read_file` | Read a UTF-8 text file (optional offset/limit for line ranges) | 64 KB | `enable_read_file` | on |
 | `write_file` | Write or overwrite a text file | — | `enable_write_file` | on |
+| `edit_file` | Find-and-replace edit on an existing file | — | `enable_edit_file` | on |
 | `append_file` | Append text to a file, creating if needed | — | `enable_append_file` | on |
 | `list_dir` | List directory contents with sizes | — | `enable_list_dir` | on |
 | `run_command` | Run an allowlisted shell command | 4 KB output | `enable_run_command` | on |

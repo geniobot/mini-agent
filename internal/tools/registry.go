@@ -19,12 +19,21 @@ type CommandArgs struct {
 }
 
 type FileReadArgs struct {
-	Path string `json:"path"`
+	Path   string `json:"path"`
+	Offset int    `json:"offset"`
+	Limit  int    `json:"limit"`
 }
 
 type FileWriteArgs struct {
 	Path    string `json:"path"`
 	Content string `json:"content"`
+}
+
+type FileEditArgs struct {
+	Path       string `json:"path"`
+	OldString  string `json:"old_string"`
+	NewString  string `json:"new_string"`
+	ReplaceAll bool   `json:"replace_all"`
 }
 
 type ListDirArgs struct {
@@ -52,8 +61,8 @@ func (r *Registry) Specs() []llm.ToolSpec {
 	if r.cfg.EnableReadFile {
 		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
 			Name:        "read_file",
-			Description: "Read a UTF-8 text file from disk.",
-			Parameters:  schema(map[string]string{"path": "string"}, []string{"path"}),
+			Description: "Read a UTF-8 text file. Optionally pass offset (1-based start line) and limit (max lines) to read part of a large file.",
+			Parameters:  schema(map[string]string{"path": "string", "offset": "integer", "limit": "integer"}, []string{"path"}),
 		}})
 	}
 	if r.cfg.EnableWriteFile {
@@ -61,6 +70,22 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			Name:        "write_file",
 			Description: "Write (overwrite) a UTF-8 text file to disk.",
 			Parameters:  schema(map[string]string{"path": "string", "content": "string"}, []string{"path", "content"}),
+		}})
+	}
+	if r.cfg.EnableEditFile {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "edit_file",
+			Description: "Edit an existing file by replacing old_string with new_string. old_string must be unique unless replace_all is true. Use this instead of write_file to change part of a file.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"path":        map[string]any{"type": "string"},
+					"old_string":  map[string]any{"type": "string"},
+					"new_string":  map[string]any{"type": "string"},
+					"replace_all": map[string]any{"type": "boolean"},
+				},
+				"required": []string{"path", "old_string", "new_string"},
+			},
 		}})
 	}
 	if r.cfg.EnableAppendFile {
@@ -129,13 +154,19 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
 			return "", err
 		}
-		return ReadFile(a.Path)
+		return ReadFileRange(a.Path, a.Offset, a.Limit)
 	case "write_file":
 		var a FileWriteArgs
 		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
 			return "", err
 		}
 		return WriteFile(a.Path, a.Content)
+	case "edit_file":
+		var a FileEditArgs
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		return EditFile(a.Path, a.OldString, a.NewString, a.ReplaceAll)
 	case "append_file":
 		var a FileWriteArgs
 		if err := json.Unmarshal([]byte(arguments), &a); err != nil {

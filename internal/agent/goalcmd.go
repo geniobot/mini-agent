@@ -22,6 +22,8 @@ Write a file (include full content):
 {"name":"write_file","arguments":{"path":"hello.py","content":"print('Hello World')\n"}}
 Read a file:
 {"name":"read_file","arguments":{"path":"hello.py"}}
+Edit part of a file (find and replace):
+{"name":"edit_file","arguments":{"path":"hello.py","old_string":"old code","new_string":"new code"}}
 Append to a file:
 {"name":"append_file","arguments":{"path":"hello.py","content":"# extra\n"}}
 List directory:

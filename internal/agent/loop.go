@@ -515,7 +515,7 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 		return nil
 	}
 	switch req.Name {
-	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files", "git":
+	case "read_file", "write_file", "edit_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files", "git":
 		var argsMap map[string]any
 		_ = json.Unmarshal(req.Arguments, &argsMap)
 		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
@@ -564,6 +564,10 @@ func toolSummary(tc session.ToolCall) string {
 			if c, ok := args["content"].(string); ok {
 				return fmt.Sprintf("%s (%d bytes)", p, len(c))
 			}
+			return p
+		}
+	case "edit_file":
+		if p, ok := args["path"].(string); ok {
 			return p
 		}
 	case "run_command":

@@ -38,6 +38,7 @@ type ToolsConfig struct {
 	UseNativeTools       bool     `yaml:"use_native_tools"`
 	EnableReadFile       bool     `yaml:"enable_read_file"`
 	EnableWriteFile      bool     `yaml:"enable_write_file"`
+	EnableEditFile       bool     `yaml:"enable_edit_file"`
 	EnableAppendFile     bool     `yaml:"enable_append_file"`
 	EnableListDir        bool     `yaml:"enable_list_dir"`
 	EnableRunCmd         bool     `yaml:"enable_run_command"`
@@ -103,9 +104,10 @@ func Load(path string) (*Config, error) {
 		cfg.Agent.GoalMaxSteps = 50
 	}
 	if !cfg.Tools.EnableReadFile && !cfg.Tools.EnableWriteFile &&
-		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir &&
-		!cfg.Tools.EnableRunCmd && !cfg.Tools.EnableWebFetch &&
-		!cfg.Tools.EnableSearchFiles && !cfg.Tools.EnableGit {
+		!cfg.Tools.EnableEditFile && !cfg.Tools.EnableAppendFile &&
+		!cfg.Tools.EnableListDir && !cfg.Tools.EnableRunCmd &&
+		!cfg.Tools.EnableWebFetch && !cfg.Tools.EnableSearchFiles &&
+		!cfg.Tools.EnableGit {
 		cfg.Tools.Enabled = false
 	}
 	if cfg.Tools.WebFetchTimeoutSecs <= 0 {

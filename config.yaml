@@ -25,6 +25,9 @@ agent:
     Read a file:
     {"name":"read_file","arguments":{"path":"hello.py"}}
 
+    Edit part of an existing file (find and replace):
+    {"name":"edit_file","arguments":{"path":"hello.py","old_string":"print('hi')","new_string":"print('hello')"}}
+
     Append to an existing file:
     {"name":"append_file","arguments":{"path":"hello.py","content":"def greet(name):\n    print(name)\n"}}
 
@@ -43,7 +46,8 @@ agent:
     Run a git command:
     {"name":"git","arguments":{"subcommand":"status","args":["--short"]}}
 
-    Use write_file when asked to: create, write, make, generate, save, build any file.
+    Use write_file when asked to: create, write, make, generate, save, build a new file.
+    Use edit_file when asked to: change, modify, fix, update part of an existing file.
     Use search_files when asked to: find, search, grep, look for text in files.
     Use run_command when asked to: run, execute, do, try any shell command.
     Use web_fetch when asked to: fetch, visit, browse, scrape, read any URL or website.
@@ -55,6 +59,7 @@ tools:
   use_native_tools: false
   enable_read_file: true
   enable_write_file: true
+  enable_edit_file: true        # find-and-replace edits on existing files
   enable_append_file: true
   enable_list_dir: true
   enable_run_command: true

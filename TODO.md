@@ -27,6 +27,8 @@
 - [x] 6.1 `web_fetch` tool (stdlib HTTP, HTML strip, 32 KB cap)
 - [x] 6.2 `search_files` tool (filepath.Walk, case-insensitive, grep output, binary skip)
 - [x] 6.3 `git` tool (read-only + confirmed-write subcommands, blocked destructive ops/flags)
+- [x] `edit_file` tool (find/replace, unique-match guard, replace_all) — borrowed from Hermes patch tool
+- [x] `read_file` offset/limit (line-range reading of large files)
 - [x] Telegram bot mode (`--telegram`, long-polling, allowlist security)
 - [x] `/goal` persistent goal mode (pause/resume, state to disk, loop detection)
 - [x] `/goal` premature-DONE fix (countToolCalls, adaptive directive)

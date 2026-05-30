@@ -94,6 +94,9 @@ func describeTools(cfg *config.Config) string {
 	if cfg.Tools.EnableWriteFile {
 		parts = append(parts, "write")
 	}
+	if cfg.Tools.EnableEditFile {
+		parts = append(parts, "edit")
+	}
 	if cfg.Tools.EnableAppendFile {
 		parts = append(parts, "append")
 	}
