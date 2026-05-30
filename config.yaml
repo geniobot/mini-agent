@@ -11,8 +11,9 @@ ollama:
 
 agent:
   max_history: 8
-  step_timeout_seconds: 300  # per-step deadline in goal mode (5 min); 0 = no timeout
-  max_goal_steps: 10         # maximum steps before goal mode stops
+  step_timeout_seconds: 300  # per-step deadline in goal/run mode (5 min); 0 = no timeout
+  max_goal_steps: 10         # maximum steps for /run (quick one-shot mode)
+  goal_max_steps: 50         # maximum steps for /goal (persistent mode); 0 = unlimited
   system_prompt: |
     You are a local coding assistant.
     For file and shell operations output ONLY a JSON object — no explanation, no markdown, nothing else.

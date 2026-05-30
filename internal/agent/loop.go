@@ -28,9 +28,10 @@ type Loop struct {
 	session  *session.Session
 	registry *tools.Registry
 	maxCtx   int
-	savePath string       // empty = no session persistence
-	quiet    bool         // suppress decoration; only emit clean output
+	savePath string         // empty = no session persistence
+	quiet    bool           // suppress decoration; only emit clean output
 	logger   *runlog.Logger // nil = no run log
+	goal     *GoalState     // non-nil while a /goal is active or paused
 }
 
 type fallbackToolRequest struct {
@@ -79,6 +80,7 @@ func (l *Loop) Run() error {
 	if !l.quiet {
 		printBanner(l.cfg)
 		l.pingOllama(true) //nolint:errcheck — error printed inside; we continue to REPL
+		l.showGoalBanner() // show paused-goal notice if one exists
 	}
 
 	// Persist session on clean exit.
@@ -160,6 +162,9 @@ func (l *Loop) Run() error {
 		var err error
 		if goal, ok := strings.CutPrefix(input, "/run "); ok {
 			err = l.runGoal(ctx, strings.TrimSpace(goal))
+		} else if input == "/goal" || strings.HasPrefix(input, "/goal ") {
+			// /goal handles its own Ctrl+C internally (pauses rather than interrupts).
+			err = l.handleGoalCommand(ctx, input)
 		} else {
 			err = l.handle(ctx, input)
 		}
@@ -176,6 +181,15 @@ func (l *Loop) Run() error {
 }
 
 func (l *Loop) printPrompt() {
+	goalPart := ""
+	if l.goal != nil {
+		switch l.goal.Status {
+		case GoalActive:
+			goalPart = fmt.Sprintf("%s[◎ goal: %d steps]%s ", ansiCyan, l.goal.Steps, ansiReset)
+		case GoalPaused:
+			goalPart = fmt.Sprintf("%s[⏸ goal paused]%s ", ansiYellow, ansiReset)
+		}
+	}
 	if l.maxCtx > 0 {
 		tokens := session.EstimateTokens(l.session.Snapshot())
 		pct := float64(tokens) / float64(l.maxCtx)
@@ -186,16 +200,20 @@ func (l *Loop) printPrompt() {
 		case pct >= 0.75:
 			color = ansiYellow
 		}
-		fmt.Printf("\n%s[%d/%d tok]%s > ", color, tokens, l.maxCtx, ansiReset)
+		fmt.Printf("\n%s%s[%d/%d tok]%s > ", goalPart, color, tokens, l.maxCtx, ansiReset)
 	} else {
-		fmt.Print("\n> ")
+		fmt.Printf("\n%s> ", goalPart)
 	}
 }
 
 func (l *Loop) printHelp() {
 	fmt.Printf("\n%sCommands:%s\n", ansiTeal, ansiReset)
 	cmds := [][2]string{
-		{"/run <goal>", "run a goal autonomously (multi-step)"},
+		{"/goal <objective>", "set a persistent goal and start working toward it"},
+		{"/goal", "show current goal status"},
+		{"/goal resume", "continue a paused goal"},
+		{"/goal clear", "stop and discard the current goal"},
+		{"/run <goal>", "run a quick one-shot goal (max 10 steps)"},
 		{"/load <file>", "inject a file into conversation context"},
 		{"/history [N]", "show last N messages from session (default 6)"},
 		{"/model [name]", "show or switch the active model"},
@@ -578,6 +596,30 @@ func (l *Loop) printHistory(n int) {
 		fmt.Printf("  %s%s:%s %s\n", color, m.Role, ansiReset, content)
 	}
 	fmt.Println()
+}
+
+// showGoalBanner checks for a persisted goal and prints a notice if one is paused.
+func (l *Loop) showGoalBanner() {
+	statePath, err := GoalStatePath()
+	if err != nil {
+		return
+	}
+	g, err := loadGoalState(statePath)
+	if err != nil || g == nil {
+		return
+	}
+	l.goal = g
+	switch g.Status {
+	case GoalPaused:
+		fmt.Printf("  %s[⏸ goal paused: %q — %d steps — /goal resume to continue]%s\n\n",
+			ansiYellow, g.Objective, g.Steps, ansiReset)
+	case GoalActive:
+		// Marked active but not running — treat as paused (process was killed mid-run).
+		g.Status = GoalPaused
+		saveGoalState(statePath, g)
+		fmt.Printf("  %s[⏸ goal paused: %q — %d steps — /goal resume to continue]%s\n\n",
+			ansiYellow, g.Objective, g.Steps, ansiReset)
+	}
 }
 
 // logTool writes one entry to the run log if a logger is configured.

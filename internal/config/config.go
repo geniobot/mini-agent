@@ -27,7 +27,8 @@ type AgentConfig struct {
 	MaxHistory         int    `yaml:"max_history"`
 	SystemPrompt       string `yaml:"system_prompt"`
 	StepTimeoutSeconds int    `yaml:"step_timeout_seconds"`
-	MaxGoalSteps       int    `yaml:"max_goal_steps"`
+	MaxGoalSteps       int    `yaml:"max_goal_steps"`       // max steps for /run (quick mode)
+	GoalMaxSteps       int    `yaml:"goal_max_steps"`       // max steps for /goal (persistent mode); 0 = unlimited
 	SummarizeOnCompact bool   `yaml:"summarize_on_compact"`
 }
 
@@ -81,6 +82,10 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Agent.MaxGoalSteps <= 0 {
 		cfg.Agent.MaxGoalSteps = 10
+	}
+	// GoalMaxSteps: 0 means unlimited; negative resets to default 50.
+	if cfg.Agent.GoalMaxSteps < 0 {
+		cfg.Agent.GoalMaxSteps = 50
 	}
 	if !cfg.Tools.EnableReadFile && !cfg.Tools.EnableWriteFile &&
 		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir && !cfg.Tools.EnableRunCmd {
