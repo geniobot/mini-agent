@@ -85,6 +85,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 			} else {
 				fmt.Printf("\n%s[✓ done]%s %s\n\n", ansiGreen, ansiReset, summary)
 			}
+			l.recordGoalResult(goal, "done", summary)
 			return nil
 		}
 
@@ -123,10 +124,12 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 			}
 		}
 
+		toolStart := time.Now()
 		result, err := l.registry.Execute(tc.Function.Name, string(argsJSON))
 		if err != nil {
 			result = "tool error: " + err.Error()
 		}
+		l.logTool(session.ToolCall{Function: session.ToolFunction{Name: tc.Function.Name, Arguments: tc.Function.Arguments}}, result, err, time.Since(toolStart))
 
 		l.printf("  %s[%s]%s %s\n", ansiTeal, tc.Function.Name, ansiReset, truncStr(result, 100))
 
@@ -134,6 +137,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		sig := stepSig{tc.Function.Name, string(argsJSON), result}
 		if step > 1 && sig == prevSig {
 			l.printf("\n%s[no progress — same action produced the same result twice, stopping]%s\n\n", ansiDim, ansiReset)
+			l.recordGoalResult(goal, "stopped", "no progress — same action repeated")
 			return nil
 		}
 		prevSig = sig
@@ -142,6 +146,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 	}
 
 	l.printf("\n%s[goal limit reached after %d steps without DONE signal]%s\n\n", ansiDim, maxSteps, ansiReset)
+	l.recordGoalResult(goal, "stopped", fmt.Sprintf("reached %d step limit without completion", maxSteps))
 	return nil
 }
 

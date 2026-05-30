@@ -13,9 +13,11 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"mini-agent/internal/config"
 	"mini-agent/internal/llm"
+	"mini-agent/internal/runlog"
 	"mini-agent/internal/session"
 	"mini-agent/internal/tools"
 )
@@ -26,8 +28,9 @@ type Loop struct {
 	session  *session.Session
 	registry *tools.Registry
 	maxCtx   int
-	savePath string // empty = no session persistence
-	quiet    bool   // suppress decoration; only emit clean output
+	savePath string       // empty = no session persistence
+	quiet    bool         // suppress decoration; only emit clean output
+	logger   *runlog.Logger // nil = no run log
 }
 
 type fallbackToolRequest struct {
@@ -46,8 +49,9 @@ func New(cfg *config.Config) *Loop {
 	}
 }
 
-func (l *Loop) SetSavePath(p string) { l.savePath = p }
-func (l *Loop) SetQuiet(q bool)      { l.quiet = q }
+func (l *Loop) SetSavePath(p string)      { l.savePath = p }
+func (l *Loop) SetQuiet(q bool)           { l.quiet = q }
+func (l *Loop) SetLogger(lg *runlog.Logger) { l.logger = lg }
 
 // LoadSession restores messages from path into the current session.
 func (l *Loop) LoadSession(path string) (int, error) {
@@ -340,10 +344,12 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 				}
 			}
 		}
+		toolStart := time.Now()
 		result, err := l.registry.Execute(tc.Function.Name, string(argsJSON))
 		if err != nil {
 			result = "tool error: " + err.Error()
 		}
+		l.logTool(tc, result, err, time.Since(toolStart))
 		if summary := toolSummary(tc); summary != "" {
 			l.printf("  %s[%s]%s %s → %s\n", ansiTeal, tc.Function.Name, ansiReset, summary, truncStr(strings.TrimSpace(result), 80))
 		} else {
@@ -572,6 +578,33 @@ func (l *Loop) printHistory(n int) {
 		fmt.Printf("  %s%s:%s %s\n", color, m.Role, ansiReset, content)
 	}
 	fmt.Println()
+}
+
+// logTool writes one entry to the run log if a logger is configured.
+func (l *Loop) logTool(tc session.ToolCall, result string, execErr error, dur time.Duration) {
+	if l.logger == nil {
+		return
+	}
+	l.logger.Log(runlog.Entry{
+		TS:          time.Now().UTC(),
+		Tool:        tc.Function.Name,
+		Args:        toolSummary(tc),
+		ResultBytes: len(result),
+		OK:          execErr == nil,
+		DurationMS:  dur.Milliseconds(),
+	})
+}
+
+// recordGoalResult appends a summary of a completed or stopped goal to the session
+// so it persists across restarts and is visible in /history.
+func (l *Loop) recordGoalResult(goal, status, detail string) {
+	var content string
+	if detail != "" {
+		content = fmt.Sprintf("[goal %s: %q — %s]", status, goal, detail)
+	} else {
+		content = fmt.Sprintf("[goal %s: %q]", status, goal)
+	}
+	l.session.Add("assistant", content)
 }
 
 func numCtx(opts map[string]any) int {

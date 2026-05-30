@@ -1,8 +1,10 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -14,11 +16,11 @@ type Config struct {
 }
 
 type OllamaConfig struct {
-	Host      string                 `yaml:"host"`
-	Model     string                 `yaml:"model"`
-	KeepAlive string                 `yaml:"keep_alive"`
-	Stream    bool                   `yaml:"stream"`
-	Options   map[string]interface{} `yaml:"options"`
+	Host      string         `yaml:"host"`
+	Model     string         `yaml:"model"`
+	KeepAlive string         `yaml:"keep_alive"`
+	Stream    bool           `yaml:"stream"`
+	Options   map[string]any `yaml:"options"`
 }
 
 type AgentConfig struct {
@@ -26,6 +28,7 @@ type AgentConfig struct {
 	SystemPrompt       string `yaml:"system_prompt"`
 	StepTimeoutSeconds int    `yaml:"step_timeout_seconds"`
 	MaxGoalSteps       int    `yaml:"max_goal_steps"`
+	SummarizeOnCompact bool   `yaml:"summarize_on_compact"`
 }
 
 type ToolsConfig struct {
@@ -35,9 +38,9 @@ type ToolsConfig struct {
 	EnableWriteFile  bool     `yaml:"enable_write_file"`
 	EnableAppendFile bool     `yaml:"enable_append_file"`
 	EnableListDir    bool     `yaml:"enable_list_dir"`
-	EnableRunCmd      bool     `yaml:"enable_run_command"`
-	ConfirmRunCmd     bool     `yaml:"confirm_run_command"`
-	ConfirmWriteFile  bool     `yaml:"confirm_write_file"`
+	EnableRunCmd     bool     `yaml:"enable_run_command"`
+	ConfirmRunCmd    bool     `yaml:"confirm_run_command"`
+	ConfirmWriteFile bool     `yaml:"confirm_write_file"`
 	AllowedCommands  []string `yaml:"allowed_commands"`
 }
 
@@ -84,4 +87,49 @@ func Load(path string) (*Config, error) {
 		cfg.Tools.Enabled = false
 	}
 	return &cfg, nil
+}
+
+// Validate checks that required fields are present and values are in range.
+// It returns a combined error listing all problems found, not just the first.
+func (c *Config) Validate() error {
+	var errs []string
+
+	if c.Ollama.Host == "" {
+		errs = append(errs, "ollama.host is required")
+	} else if !strings.HasPrefix(c.Ollama.Host, "http://") && !strings.HasPrefix(c.Ollama.Host, "https://") {
+		errs = append(errs, "ollama.host must start with http:// or https://")
+	}
+	if c.Ollama.Model == "" {
+		errs = append(errs, "ollama.model is required")
+	}
+	if c.Agent.MaxHistory < 1 {
+		errs = append(errs, "agent.max_history must be >= 1")
+	}
+	if c.Agent.MaxGoalSteps < 1 {
+		errs = append(errs, "agent.max_goal_steps must be >= 1")
+	}
+	if nc := intFromOptions(c.Ollama.Options, "num_ctx"); nc != 0 && nc < 64 {
+		errs = append(errs, "ollama.options.num_ctx must be >= 64")
+	}
+	if np := intFromOptions(c.Ollama.Options, "num_predict"); np != 0 && np < 1 {
+		errs = append(errs, "ollama.options.num_predict must be >= 1")
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
+	}
+	return nil
+}
+
+func intFromOptions(opts map[string]any, key string) int {
+	if opts == nil {
+		return 0
+	}
+	switch n := opts[key].(type) {
+	case int:
+		return n
+	case float64:
+		return int(n)
+	}
+	return 0
 }

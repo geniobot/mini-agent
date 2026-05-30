@@ -14,7 +14,7 @@ type ToolSpec struct {
 type ToolFunction struct {
 	Name        string                 `json:"name"`
 	Description string                 `json:"description"`
-	Parameters  map[string]interface{} `json:"parameters"`
+	Parameters  map[string]any `json:"parameters"`
 }
 
 type ChatRequest struct {
@@ -22,7 +22,7 @@ type ChatRequest struct {
 	Messages  []session.Message      `json:"messages"`
 	Stream    bool                   `json:"stream"`
 	Tools     []ToolSpec             `json:"tools,omitempty"`
-	Options   map[string]interface{} `json:"options,omitempty"`
+	Options   map[string]any `json:"options,omitempty"`
 	KeepAlive string                 `json:"keep_alive,omitempty"`
 }
 

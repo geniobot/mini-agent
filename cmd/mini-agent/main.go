@@ -7,6 +7,7 @@ import (
 
 	"mini-agent/internal/agent"
 	"mini-agent/internal/config"
+	"mini-agent/internal/runlog"
 	"mini-agent/internal/session"
 )
 
@@ -18,6 +19,7 @@ func main() {
 	quiet := flag.Bool("quiet", false, "suppress all decoration; only emit the final answer (implies --plain)")
 	fresh := flag.Bool("fresh", false, "start with empty session, skip loading saved history")
 	noSave := flag.Bool("no-save", false, "do not save session on exit")
+	doctor := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
 	flag.Parse()
 
 	if *quiet || *plain || os.Getenv("NO_COLOR") != "" {
@@ -29,6 +31,15 @@ func main() {
 		fmt.Fprintf(os.Stderr, "config error: %v\n", err)
 		os.Exit(1)
 	}
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "%v\n", err)
+		os.Exit(1)
+	}
+
+	if *doctor {
+		agent.RunDoctor(cfg)
+		return
+	}
 
 	if *modelFlag != "" {
 		cfg.Ollama.Model = *modelFlag
@@ -38,6 +49,14 @@ func main() {
 
 	if *quiet {
 		loop.SetQuiet(true)
+	}
+
+	// Run log — open once, close on exit. Errors are non-fatal.
+	if logPath, err := runlog.DefaultPath(); err == nil {
+		if lg, err := runlog.Open(logPath); err == nil {
+			loop.SetLogger(lg)
+			defer lg.Close()
+		}
 	}
 
 	// Session persistence: load history unless --fresh; save on exit unless --no-save or --run.
