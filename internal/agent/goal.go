@@ -110,7 +110,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 			text := truncStr(strings.TrimSpace(resp.Content), maxNoteLen)
 			notes = appendNotes(notes, fmt.Sprintf("step %d [reasoning]", step), text)
 			consecutiveNoTool++
-			if consecutiveNoTool >= l.cfg.FallbackAfterFailures && l.fallbackClient != nil {
+			if l.cfg.FallbackAfterFailures > 0 && consecutiveNoTool >= l.cfg.FallbackAfterFailures && l.fallbackClient != nil {
 				fbProvider := l.cfg.Providers[l.cfg.FallbackProvider]
 				savedFallback := l.fallbackClient
 				l.client = l.fallbackClient
