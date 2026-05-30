@@ -249,7 +249,7 @@ You should see the banner, a health check confirming Ollama is reachable, and th
 
 ### Chat mode
 
-Just type. Responses stream in real time. The `[119/2048 tok]` counter at the prompt shows how much of the context window is currently in use — a key signal on constrained hardware.
+Just type. Responses stream in real time. The `[119/2048 tok]` counter at the prompt shows how much of the context window is currently in use — a key signal on constrained hardware. When the history buffer is trimmed to stay within budget, the prompt briefly shows `(compacted)` so you know the token count dropped intentionally.
 
 ```
 [119/2048 tok] > Explain the difference between a mutex and a semaphore in Go.

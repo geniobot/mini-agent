@@ -41,9 +41,9 @@
 ## 🔲 Open — Tier 1 (quick wins, do first)
 
 ### Bugs
-- [ ] Remove stale test files from repo root (`hello.txt`, `hello_world.txt`, `hi.txt`, `howareyou.txt`) — add `*.txt` exception or clean up manually
-- [ ] `run.sh` in repo root is undocumented — clarify purpose or remove
-- [ ] Token counter decreases mid-session when compact fires — show `(compacted)` notice so users aren't confused
+- [x] Remove stale test files from repo root (`hello.txt`, `hello_world.txt`, `hi.txt`, `howareyou.txt`) — deleted
+- [x] `run.sh` in repo root is undocumented — added comment explaining it as a convenience wrapper
+- [x] Token counter decreases mid-session when compact fires — show `(compacted)` notice so users aren't confused
 
 ### 5.1 Model tier documentation
 - [ ] Test `/goal` with `qwen2.5-coder:3b` — document whether multi-file goals complete reliably
