@@ -111,8 +111,12 @@ func WriteFile(path, content string) (string, error) {
 	if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 		return "", err
 	}
+	_, existed := os.Stat(clean)
 	if err := os.WriteFile(clean, []byte(content), 0o644); err != nil {
 		return "", err
+	}
+	if existed == nil {
+		return fmt.Sprintf("wrote %d bytes to %s (overwrote existing file — use edit_file to modify, append_file to add)", len(content), clean), nil
 	}
 	return fmt.Sprintf("wrote %d bytes to %s", len(content), clean), nil
 }

@@ -140,7 +140,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		}
 		l.logTool(session.ToolCall{Function: session.ToolFunction{Name: tc.Function.Name, Arguments: tc.Function.Arguments}}, result, err, time.Since(toolStart))
 
-		l.printf("  %s[%s]%s %s\n", ansiTeal, tc.Function.Name, ansiReset, truncStr(result, 100))
+		l.printf("  %s[%s]%s %s\n", ansiTeal, tc.Function.Name, ansiReset, truncStr(result, 300))
 
 		// Loop detection: identical (tool, args, result) on back-to-back steps = stuck.
 		sig := stepSig{tc.Function.Name, string(argsJSON), result}
