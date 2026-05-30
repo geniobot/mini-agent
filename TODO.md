@@ -26,6 +26,7 @@
 ### Phase 6 — Tool expansion (partial)
 - [x] 6.1 `web_fetch` tool (stdlib HTTP, HTML strip, 32 KB cap)
 - [x] 6.2 `search_files` tool (filepath.Walk, case-insensitive, grep output, binary skip)
+- [x] 6.3 `git` tool (read-only + confirmed-write subcommands, blocked destructive ops/flags)
 - [x] Telegram bot mode (`--telegram`, long-polling, allowlist security)
 - [x] `/goal` persistent goal mode (pause/resume, state to disk, loop detection)
 - [x] `/goal` premature-DONE fix (countToolCalls, adaptive directive)
@@ -52,17 +53,6 @@
 ---
 
 ## 🔲 Open — Tier 2 (Phase 6: remaining tools)
-
-### 6.3 `git` tool
-- [ ] Create `internal/tools/git.go`
-  - Thin pass-through to local `git` binary
-  - Read-only allowlist: `status`, `log`, `diff`, `branch`, `show`, `stash`, `fetch`
-  - Write allowlist (requires confirmation if `confirm_git_write: true`): `add`, `commit`, `push`, `pull`, `clone`
-  - Blocked: `reset`, `rebase`, `filter-branch`, anything with `--force`
-  - Graceful disable if `git` not in PATH (startup warning, not fatal)
-  - Cap output at 8 KB
-- [ ] Register as `git` + config keys `enable_git: false`, `confirm_git_write: true`
-- [ ] Unit tests (`t.TempDir()` + `git init`)
 
 ### 6.4 `json_query` tool
 - [ ] Create `internal/tools/json.go`

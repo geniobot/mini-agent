@@ -107,6 +107,19 @@ func describeTools(cfg *config.Config) string {
 		}
 		parts = append(parts, label)
 	}
+	if cfg.Tools.EnableSearchFiles {
+		parts = append(parts, "search")
+	}
+	if cfg.Tools.EnableWebFetch {
+		parts = append(parts, "web")
+	}
+	if cfg.Tools.EnableGit {
+		label := "git"
+		if cfg.Tools.ConfirmGitWrite {
+			label += " (confirmed)"
+		}
+		parts = append(parts, label)
+	}
 	if len(parts) == 0 {
 		return ansiDim + "none" + ansiReset
 	}

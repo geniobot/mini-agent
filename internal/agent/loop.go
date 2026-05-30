@@ -370,6 +370,18 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 				}
 			}
 		}
+		if tc.Function.Name == "git" && l.registry.ConfirmGitWrite() {
+			if needsConfirm, prompt := l.registry.GitWriteCheck(string(argsJSON)); needsConfirm {
+				if !confirm(fmt.Sprintf("Allow %q? [y/N]: ", prompt)) {
+					if l.cfg.Tools.UseNativeTools {
+						l.session.AddMessage(session.Message{Role: "tool", Name: tc.Function.Name, Content: "tool error: user denied git command"})
+					} else {
+						toolResults.WriteString("tool error: user denied git command\n")
+					}
+					continue
+				}
+			}
+		}
 		toolStart := time.Now()
 		result, err := l.registry.Execute(tc.Function.Name, string(argsJSON))
 		if err != nil {
@@ -503,7 +515,7 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 		return nil
 	}
 	switch req.Name {
-	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files":
+	case "read_file", "write_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files", "git":
 		var argsMap map[string]any
 		_ = json.Unmarshal(req.Arguments, &argsMap)
 		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
@@ -564,6 +576,24 @@ func toolSummary(tc session.ToolCall) string {
 				return strings.Join(parts, " ")
 			}
 			return cmd
+		}
+	case "web_fetch":
+		if u, ok := args["url"].(string); ok {
+			return u
+		}
+	case "search_files":
+		if p, ok := args["pattern"].(string); ok {
+			return fmt.Sprintf("%q", p)
+		}
+	case "git":
+		if sub, ok := args["subcommand"].(string); ok {
+			parts := []string{sub}
+			if rawArgs, ok := args["args"].([]any); ok {
+				for _, a := range rawArgs {
+					parts = append(parts, fmt.Sprint(a))
+				}
+			}
+			return strings.Join(parts, " ")
 		}
 	}
 	return ""

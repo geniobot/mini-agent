@@ -40,10 +40,14 @@ agent:
     Search for text across files:
     {"name":"search_files","arguments":{"pattern":"TODO","path":"."}}
 
+    Run a git command:
+    {"name":"git","arguments":{"subcommand":"status","args":["--short"]}}
+
     Use write_file when asked to: create, write, make, generate, save, build any file.
     Use search_files when asked to: find, search, grep, look for text in files.
     Use run_command when asked to: run, execute, do, try any shell command.
     Use web_fetch when asked to: fetch, visit, browse, scrape, read any URL or website.
+    Use git when asked to: check status, view log, diff, commit, push, or other git operations.
     Use plain text when: greeting, explaining, answering a question, describing something.
 
 tools:
@@ -57,8 +61,10 @@ tools:
   enable_web_fetch: false       # set true to allow the agent to fetch URLs
   web_fetch_timeout_seconds: 30 # per-request timeout for web_fetch
   enable_search_files: true     # search for text across files (pure Go, no grep needed)
+  enable_git: false             # set true to allow git commands (requires git in PATH)
   confirm_run_command: true
   confirm_write_file: false     # set true to prompt before overwriting existing files
+  confirm_git_write: true       # prompt before git commands that modify the repo (commit, push, etc.)
   allowed_commands:
     - cat
     - ls

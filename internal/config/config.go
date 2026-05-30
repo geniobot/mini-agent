@@ -43,7 +43,9 @@ type ToolsConfig struct {
 	EnableRunCmd         bool     `yaml:"enable_run_command"`
 	EnableWebFetch       bool     `yaml:"enable_web_fetch"`
 	EnableSearchFiles    bool     `yaml:"enable_search_files"`
+	EnableGit            bool     `yaml:"enable_git"`
 	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
+	ConfirmGitWrite      bool     `yaml:"confirm_git_write"`
 	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`
 	AllowedCommands      []string `yaml:"allowed_commands"`
 	WebFetchTimeoutSecs  int      `yaml:"web_fetch_timeout_seconds"`
@@ -103,7 +105,7 @@ func Load(path string) (*Config, error) {
 	if !cfg.Tools.EnableReadFile && !cfg.Tools.EnableWriteFile &&
 		!cfg.Tools.EnableAppendFile && !cfg.Tools.EnableListDir &&
 		!cfg.Tools.EnableRunCmd && !cfg.Tools.EnableWebFetch &&
-		!cfg.Tools.EnableSearchFiles {
+		!cfg.Tools.EnableSearchFiles && !cfg.Tools.EnableGit {
 		cfg.Tools.Enabled = false
 	}
 	if cfg.Tools.WebFetchTimeoutSecs <= 0 {

@@ -32,6 +32,8 @@ Fetch a URL:
 {"name":"web_fetch","arguments":{"url":"https://example.com","timeout_seconds":30}}
 Search for text in files:
 {"name":"search_files","arguments":{"pattern":"TODO","path":"."}}
+Run a git command:
+{"name":"git","arguments":{"subcommand":"status","args":["--short"]}}
 
 Rules:
 - Always call a tool on the very first step. Never output DONE on the first step.
@@ -337,6 +339,16 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 						saveGoalState(statePath, g)
 						continue
 					}
+				}
+			}
+		}
+		if tc.Function.Name == "git" && l.registry.ConfirmGitWrite() {
+			if needsConfirm, prompt := l.registry.GitWriteCheck(string(argsJSON)); needsConfirm {
+				if !confirm(fmt.Sprintf("Allow %q? [y/N]: ", prompt)) {
+					g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [denied]", g.Steps), "user denied git command")
+					g.UpdatedAt = time.Now()
+					saveGoalState(statePath, g)
+					continue
 				}
 			}
 		}

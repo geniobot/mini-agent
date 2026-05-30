@@ -31,6 +31,11 @@ type ListDirArgs struct {
 	Path string `json:"path"`
 }
 
+type GitArgs struct {
+	Subcommand string   `json:"subcommand"`
+	Args       []string `json:"args"`
+}
+
 func New(cfg config.ToolsConfig) *Registry {
 	return &Registry{cfg: cfg}
 }
@@ -100,6 +105,20 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			Parameters:  schema(map[string]string{"pattern": "string", "path": "string", "max_results": "integer"}, []string{"pattern"}),
 		}})
 	}
+	if r.cfg.EnableGit && GitAvailable() {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "git",
+			Description: "Run a git subcommand (status, log, diff, branch, add, commit, push, pull, etc.) in the current repository.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"subcommand": map[string]any{"type": "string"},
+					"args":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}},
+				},
+				"required": []string{"subcommand"},
+			},
+		}})
+	}
 	return specs
 }
 
@@ -163,6 +182,12 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			a.Path = "."
 		}
 		return SearchFiles(a.Pattern, a.Path, a.MaxResults)
+	case "git":
+		var a GitArgs
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		return RunGit(a.Subcommand, a.Args, "")
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}
@@ -182,6 +207,21 @@ func (r *Registry) ConfirmRunCommand() bool {
 
 func (r *Registry) ConfirmWriteFile() bool {
 	return r.cfg.ConfirmWriteFile
+}
+
+func (r *Registry) ConfirmGitWrite() bool {
+	return r.cfg.ConfirmGitWrite
+}
+
+// GitWriteCheck reports whether a git tool call modifies the repo and needs
+// confirmation, plus a human-readable description of the command for the prompt.
+func (r *Registry) GitWriteCheck(arguments string) (needsConfirm bool, prompt string) {
+	var a GitArgs
+	if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+		return false, arguments
+	}
+	desc := strings.TrimSpace("git " + a.Subcommand + " " + strings.Join(a.Args, " "))
+	return IsGitWriteSubcommand(a.Subcommand), desc
 }
 
 func (r *Registry) allowed(cmd string) bool {
