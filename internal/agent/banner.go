@@ -74,8 +74,20 @@ func printBanner(cfg *config.Config) {
 	fmt.Printf("  %s%s%s%s%s\n", ansiDim, tagline, strings.Repeat(" ", padding), version, ansiReset)
 	fmt.Printf("  %s%s%s\n", ansiDim, sep, ansiReset)
 
-	host := strings.TrimPrefix(cfg.Ollama.Host, "http://")
-	fmt.Printf("  %s◆%s  model   %s\n", ansiTeal, ansiReset, cfg.Ollama.Model)
+	var model, host string
+	if len(cfg.Providers) > 0 {
+		p := cfg.Providers[cfg.DefaultProvider]
+		model = p.Model
+		if p.Type == "openai_compat" {
+			host = strings.TrimPrefix(p.BaseURL, "https://")
+		} else {
+			host = strings.TrimPrefix(p.Host, "http://")
+		}
+	} else {
+		model = cfg.Ollama.Model
+		host = strings.TrimPrefix(cfg.Ollama.Host, "http://")
+	}
+	fmt.Printf("  %s◆%s  model   %s\n", ansiTeal, ansiReset, model)
 	fmt.Printf("  %s◆%s  host    %s\n", ansiTeal, ansiReset, host)
 	fmt.Printf("  %s◆%s  tools   %s\n", ansiTeal, ansiReset, describeTools(cfg))
 

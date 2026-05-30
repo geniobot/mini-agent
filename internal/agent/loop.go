@@ -78,6 +78,9 @@ func New(cfg *config.Config) *Loop {
 	}
 
 	ctx := numCtx(defProvider.Options)
+	if ctx == 0 && defProvider.Type == "openai_compat" {
+		ctx = 8192 // sensible default for cloud providers that don't use num_ctx
+	}
 	return &Loop{
 		cfg:             cfg,
 		client:          defClient,

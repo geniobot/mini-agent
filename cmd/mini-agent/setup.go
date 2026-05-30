@@ -60,11 +60,22 @@ func runSetup(configPath string) {
 	}
 
 	// Model
-	fmt.Printf("  Model [%s]: ", preset.defaultModel)
-	sc.Scan()
-	model := strings.TrimSpace(sc.Text())
-	if model == "" {
-		model = preset.defaultModel
+	fmt.Println()
+	fmt.Println("  ── Step 2: model ─────────────────────────────────")
+	var model string
+	for {
+		fmt.Printf("  Model [%s]: ", preset.defaultModel)
+		sc.Scan()
+		model = strings.TrimSpace(sc.Text())
+		if model == "" {
+			model = preset.defaultModel
+		}
+		// Reject bare single-digit input (user likely still navigating the menu)
+		if len(model) == 1 && model[0] >= '1' && model[0] <= '9' {
+			fmt.Printf("  %q doesn't look like a model name — enter the model identifier or press Enter for the default\n", model)
+			continue
+		}
+		break
 	}
 
 	// API key (cloud only)
