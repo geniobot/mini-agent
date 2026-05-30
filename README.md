@@ -51,7 +51,9 @@ Runs comfortably on hardware as old as a 2012 Mac Mini. No Python, no vector dat
 - [CLI Flags](#cli-flags)
 - [Configuration](#configuration)
 - [Tools](#tools)
+- [Telegram Bot](#telegram-bot)
 - [Hardware Guide](#hardware-guide)
+- [Project Context (CONTEXT.md)](#project-context-contextmd)
 - [Session Persistence](#session-persistence)
 - [Project Structure](#project-structure)
 - [Contributing](#contributing)
@@ -112,16 +114,20 @@ In multi-step goal execution, each step receives a running `notes` string instea
 - `append_file` — append to files without overwriting
 - `list_dir` — list directory contents with file sizes
 - `run_command` — execute allowlisted shell commands with confirmation prompt
+- `search_files` — recursive case-insensitive text search (grep-style output)
 - `web_fetch` — fetch any URL and return readable plain text (HTML stripped, 32 KB cap)
+- `git` — run git subcommands (read-only freely, writes with confirmation)
 
 **Memory and context**
 - Session history persists to `~/.mini-agent/session.json` across restarts
 - Goal state persists to `~/.mini-agent/goal.json` — resume after restart
 - Tool call log written to `~/.mini-agent/run.log` (JSON lines, rotates at 10 MB)
+- `CONTEXT.md` in the working directory is auto-injected as project context
 - Token-budget-aware trimming — history is pruned to fit `num_ctx` automatically
 - `/load <file>` injects a file into context in one command
 - `/forget N` removes the last N messages without clearing everything
 - `/history N` shows the last N conversation turns
+- `/models` lists models available in Ollama
 
 **Integrations**
 - **Telegram bot** — `mini-agent --telegram` to chat with your agent via Telegram
@@ -376,6 +382,7 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `/load <file>` | Inject a file into conversation context |
 | `/history [N]` | Show last N conversation messages (default: 6) |
 | `/model [name]` | Show the current model, or switch to `name` without restarting |
+| `/models` | List all models available in the connected Ollama instance |
 | `/unload` | Evict the current model from Ollama's RAM to free memory |
 | `/status` | Show model, host, token usage, history depth, and active config |
 | `/forget [N]` | Drop the last N messages from history (default: 2) |
@@ -398,6 +405,8 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `--quiet` | `false` | Suppress all decoration — only the final answer reaches stdout |
 | `--doctor` | — | Validate config, check Ollama connectivity, verify model — then exit |
 | `--telegram` | — | Start Telegram bot mode (requires `TELEGRAM_BOT_TOKEN` env var) |
+| `--no-context` | `false` | Skip auto-loading `CONTEXT.md` from the working directory |
+| `--version` | — | Print version and exit |
 
 **Config file search order:** `--config` flag → `~/.mini-agent/config.yaml` → `./config.yaml`
 
@@ -442,8 +451,12 @@ tools:
   enable_run_command: true
   enable_web_fetch: false         # Fetch URLs and return readable plain text.
   web_fetch_timeout_seconds: 30   # Per-request timeout for web_fetch.
+  enable_search_files: true       # Recursive text search across files (pure Go).
+  enable_git: false               # Run git subcommands (requires git in PATH).
   confirm_run_command: true       # Prompt [y/N] before every shell command execution.
                                   # Strongly recommended to keep true.
+  confirm_git_write: true         # Prompt before git commands that modify the repo
+                                  # (commit, push, add, etc.). Read-only git runs freely.
   allowed_commands:               # Explicit allowlist for run_command.
     - ls                          # Only commands listed here can be executed.
     - cat
@@ -486,14 +499,25 @@ All tools are available in both chat mode and goal mode. The agent selects them 
 | `append_file` | Append text to a file, creating if needed | — | `enable_append_file` | on |
 | `list_dir` | List directory contents with sizes | — | `enable_list_dir` | on |
 | `run_command` | Run an allowlisted shell command | 4 KB output | `enable_run_command` | on |
+| `search_files` | Recursive case-insensitive text search | 50 matches | `enable_search_files` | on |
 | `web_fetch` | Fetch a URL, strip HTML, return readable text | 32 KB | `enable_web_fetch` | **off** |
+| `git` | Run a git subcommand in the current repo | 8 KB output | `enable_git` | **off** |
 
-Shell output exceeding 4 KB and web content exceeding 32 KB are truncated with a notice so the model knows it didn't see the full result.
+Tool output is truncated with a notice when it exceeds its limit, so the model knows it didn't see the full result.
 
-`web_fetch` uses only stdlib `net/http` — no external browser or Playwright required. Enable it in config:
+`web_fetch` and `search_files` use only the Go standard library — no external browser, Playwright, or grep required. `git` is a thin wrapper around the local `git` binary and only registers if `git` is in `PATH`.
+
+**`git` safety model:**
+- Read-only subcommands (`status`, `log`, `diff`, `show`, `branch`, …) run freely
+- Write subcommands (`add`, `commit`, `push`, `pull`, `merge`, …) prompt for confirmation when `confirm_git_write: true`
+- Destructive subcommands (`reset`, `rebase`, `clean`, `filter-branch`, …) are blocked entirely
+- Dangerous flags (`--force`, `--hard`, `--no-verify`, …) are blocked regardless of subcommand
+
+Enable the opt-in tools in config:
 ```yaml
 tools:
   enable_web_fetch: true
+  enable_git: true
 ```
 
 ---
@@ -577,6 +601,25 @@ mini-agent --telegram
 
 ---
 
+## Project Context (CONTEXT.md)
+
+Drop a `CONTEXT.md` file in your working directory (or `.mini-agent/CONTEXT.md`) and mini-agent injects it as project context on every launch — no need to `/load` it each time.
+
+```bash
+cat > CONTEXT.md <<'EOF'
+This is a Go CLI agent. Entry point: cmd/mini-agent/main.go.
+Tools live in internal/tools/. Follow the existing registry pattern.
+Run tests with: make test
+EOF
+
+mini-agent          # startup shows: ◆  context  CONTEXT.md (~38 tokens)
+mini-agent --no-context   # skip injection for this run
+```
+
+The content is capped at 4 KB to protect the context window. This works in interactive, `--run`, and `--telegram` modes — useful for giving the agent persistent awareness of your project conventions.
+
+---
+
 ## Session Persistence
 
 Conversation history is saved automatically to `~/.mini-agent/session.json` when you `/exit`. It is restored on the next startup. The rolling context window and token budget keep the file small indefinitely — it will never grow without bound.
@@ -632,6 +675,8 @@ mini-agent/
 │       ├── limit.go          # Output cap buffer
 │       ├── registry.go       # Tool registration, dispatch, Specs()
 │       ├── shell.go          # run_command with timeout
+│       ├── search.go         # search_files: recursive text search
+│       ├── git.go            # git: read-only + confirmed-write subcommands
 │       └── web.go            # web_fetch: HTTP GET + HTML strip + 32 KB cap
 ├── config.yaml               # Default configuration (copy to ~/.mini-agent/ for global use)
 ├── Makefile                  # build, install, uninstall, run, test
