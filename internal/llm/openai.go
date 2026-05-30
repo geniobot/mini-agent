@@ -71,7 +71,7 @@ func (c *OpenAIClient) ChatStream(ctx context.Context, req ChatRequest, onChunk 
 	if t, ok := floatFromOptions(req.Options, "temperature"); ok {
 		oaReq.Temperature = &t
 	}
-	if n, ok := intFromOptionsOAI(req.Options, "num_predict"); ok {
+	if n, ok := intFromOptions(req.Options, "num_predict"); ok {
 		oaReq.MaxTokens = &n
 	}
 
@@ -120,10 +120,11 @@ func (c *OpenAIClient) ChatStream(ctx context.Context, req ChatRequest, onChunk 
 					Function: session.ToolFunction{Name: tc.name, Arguments: args},
 				})
 			}
-			return onChunk(ChatChunk{
-				Message: session.Message{Role: "assistant", ToolCalls: tcs},
-				Done:    true,
-			})
+			msg := session.Message{Role: "assistant"}
+			if len(tcs) > 0 {
+				msg.ToolCalls = tcs
+			}
+			return onChunk(ChatChunk{Message: msg, Done: true})
 		}
 		data, ok := strings.CutPrefix(line, "data: ")
 		if !ok {
@@ -131,7 +132,7 @@ func (c *OpenAIClient) ChatStream(ctx context.Context, req ChatRequest, onChunk 
 		}
 		var chunk openAIChunk
 		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
-			continue
+			return fmt.Errorf("openai sse parse: %w", err)
 		}
 		if chunk.Error != nil {
 			return fmt.Errorf("openai error: %s", chunk.Error.Message)
@@ -161,18 +162,37 @@ func (c *OpenAIClient) ChatStream(ctx context.Context, req ChatRequest, onChunk 
 			toolArgsBuf[tc.Index] = entry
 		}
 	}
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	// Flush any accumulated tool calls even if [DONE] was absent.
+	var tcs []session.ToolCall
+	for _, tc := range toolArgsBuf {
+		var args map[string]any
+		if tc.args != "" {
+			_ = json.Unmarshal([]byte(tc.args), &args)
+		}
+		tcs = append(tcs, session.ToolCall{
+			Function: session.ToolFunction{Name: tc.name, Arguments: args},
+		})
+	}
+	msg := session.Message{Role: "assistant"}
+	if len(tcs) > 0 {
+		msg.ToolCalls = tcs
+	}
+	return onChunk(ChatChunk{Message: msg, Done: true})
 }
 
 // ListModels fetches the model list from /v1/models.
 func (c *OpenAIClient) ListModels() ([]string, error) {
-	client := &http.Client{Timeout: 8 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, c.BaseURL+"/v1/models", nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/v1/models", nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.APIKey)
-	resp, err := client.Do(req)
+	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +225,7 @@ func floatFromOptions(opts map[string]any, key string) (float64, bool) {
 	return 0, false
 }
 
-func intFromOptionsOAI(opts map[string]any, key string) (int, bool) {
+func intFromOptions(opts map[string]any, key string) (int, bool) {
 	if opts == nil {
 		return 0, false
 	}
