@@ -12,14 +12,23 @@ import (
 	"mini-agent/internal/session"
 )
 
-const goalSystem = `You are a local automation agent. Complete the given goal step by step using tools.
-To use a tool output ONLY a raw JSON object — no prose, no markdown, no explanation:
-{"name":"write_file","arguments":{"path":"notes.txt","content":"Hello world"}}
-{"name":"read_file","arguments":{"path":"notes.txt"}}
-{"name":"append_file","arguments":{"path":"notes.txt","content":"extra line"}}
+const goalSystem = `You are a local automation agent executing a goal step by step.
+Each response must be EITHER a single JSON tool call OR the completion signal. Never both.
+
+Write a file (include full content):
+{"name":"write_file","arguments":{"path":"hello.py","content":"print('Hello World')\n"}}
+Read a file:
+{"name":"read_file","arguments":{"path":"hello.py"}}
+Append to a file:
+{"name":"append_file","arguments":{"path":"hello.py","content":"# extra\n"}}
+List directory:
 {"name":"list_dir","arguments":{"path":"."}}
-{"name":"run_command","arguments":{"command":"ls","args":["-la"]}}
-When the goal is fully complete output exactly: DONE: <one sentence summary>`
+Run a command:
+{"name":"run_command","arguments":{"command":"ls","args":[]}}
+
+Always call a tool first. Never output DONE on the first step.
+After each tool result, either call another tool or signal completion.
+Only signal completion when ALL tasks are done: DONE: <one sentence summary>`
 
 const maxNoteLen = 800   // chars per individual result before appending to notes
 const maxNotesLen = 2000 // chars for total accumulated working notes (~500 tokens)
@@ -138,10 +147,10 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 func buildGoalPrompt(goal string, step int, notes string) string {
 	if step == 1 {
-		return "Goal: " + goal
+		return "Goal: " + goal + "\n\nCall a tool to start."
 	}
 	return fmt.Sprintf(
-		"Goal: %s\n\nWorking notes:\n%s\nContinue toward the goal, or output DONE: <summary> if it is complete.",
+		"Goal: %s\n\nProgress so far:\n%s\nCall another tool to continue, or output DONE: <summary> only when every task is complete.",
 		goal, notes,
 	)
 }

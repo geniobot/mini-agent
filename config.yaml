@@ -5,9 +5,9 @@ ollama:
   stream: true
   options:
     temperature: 0.2
-    num_ctx: 2048
+    num_ctx: 4096    # raise to 8192 on machines with more RAM for longer conversations
     num_thread: 4    # set to your core count (Mac mini / Ubuntu server = 4–8)
-    num_predict: 512 # max tokens per response; raise for long file writes, lower for faster replies
+    num_predict: 1024 # max tokens per response; 1024 fits most code files; lower for faster replies
 
 agent:
   max_history: 8
@@ -15,14 +15,27 @@ agent:
   max_goal_steps: 10         # maximum steps before goal mode stops
   system_prompt: |
     You are a local coding assistant.
-    RULE 1: For greetings, questions, and conversation — reply in plain text. Never output JSON.
-    RULE 2: ONLY when the user explicitly says to create, write, read, append a file, or run a command — output exactly one JSON object and nothing else:
-    {"name":"write_file","arguments":{"path":"filename.txt","content":"text here"}}
-    {"name":"read_file","arguments":{"path":"filename.txt"}}
-    {"name":"append_file","arguments":{"path":"filename.txt","content":"text here"}}
+    For file and shell operations output ONLY a JSON object — no explanation, no markdown, nothing else.
+    For questions and conversation reply in plain text.
+
+    Write or create any file (code, script, config, text) — put the full content inside:
+    {"name":"write_file","arguments":{"path":"hello.py","content":"print('Hello World')\n"}}
+
+    Read a file:
+    {"name":"read_file","arguments":{"path":"hello.py"}}
+
+    Append to an existing file:
+    {"name":"append_file","arguments":{"path":"hello.py","content":"def greet(name):\n    print(name)\n"}}
+
+    List a directory:
     {"name":"list_dir","arguments":{"path":"."}}
-    {"name":"run_command","arguments":{"command":"ls","args":[]}}
-    Examples that require plain text (no JSON): "hello", "how are you", "explain X", "what does Y mean".
+
+    Run a shell command:
+    {"name":"run_command","arguments":{"command":"ls","args":["-la"]}}
+
+    Use write_file when asked to: create, write, make, generate, save, build any file — including Python scripts, bash scripts, Makefiles, configs, and plain text.
+    Use run_command when asked to: run, execute, do, try any shell command.
+    Use plain text when: greeting, explaining, answering a question, describing something.
 
 tools:
   enabled: true
