@@ -485,12 +485,23 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 	return nil
 }
 
-// chatOnce sends the current session, retrying once on context overflow.
+// chatOnce sends the current session, retrying on context overflow and rate limits.
 func (l *Loop) chatOnce(ctx context.Context) (session.Message, error) {
 	msg, err := l.chatOnceWith(ctx, l.session.Snapshot())
 	if err != nil && isContextOverflow(err) {
 		l.printf("\n%s[context overflow — trimming 2 messages and retrying]%s\n", ansiDim, ansiReset)
 		l.session.DropOldest(2)
+		msg, err = l.chatOnceWith(ctx, l.session.Snapshot())
+	}
+	// Retry on rate limit (429): parse suggested delay from error message and wait.
+	for retries := 0; retries < 3 && err != nil && isRateLimit(err); retries++ {
+		delay := parseRetryAfter(err.Error())
+		l.printf("%s[rate limited — retrying in %.0fs]%s\n", ansiDim, delay.Seconds(), ansiReset)
+		select {
+		case <-ctx.Done():
+			return msg, ctx.Err()
+		case <-time.After(delay):
+		}
 		msg, err = l.chatOnceWith(ctx, l.session.Snapshot())
 	}
 	return msg, err
@@ -560,15 +571,33 @@ func parseFallbackToolCall(content string) []session.ToolCall {
 	if clean == "" {
 		return nil
 	}
+	// Strip a leading code fence (```json ... ```) if present.
 	if strings.HasPrefix(clean, "```") {
 		lines := strings.Split(clean, "\n")
 		if len(lines) >= 3 && strings.HasPrefix(lines[0], "```") && strings.TrimSpace(lines[len(lines)-1]) == "```" {
 			clean = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
 		}
 	}
-	// Only parse when the response IS a JSON object, not when it merely contains one.
-	// If the model prefixed its output with prose the system prompt told it not to write,
-	// treat the whole thing as plain text rather than silently executing the embedded JSON.
+	// When the model writes prose before a JSON block (e.g. "I will run ...\n```json\n{...}"),
+	// find the first embedded code fence and extract its contents.
+	if !strings.HasPrefix(clean, "{") {
+		if i := strings.Index(clean, "```"); i >= 0 {
+			rest := clean[i:]
+			lines := strings.Split(rest, "\n")
+			if len(lines) >= 3 {
+				end := -1
+				for j := len(lines) - 1; j > 0; j-- {
+					if strings.TrimSpace(lines[j]) == "```" {
+						end = j
+						break
+					}
+				}
+				if end > 1 {
+					clean = strings.TrimSpace(strings.Join(lines[1:end], "\n"))
+				}
+			}
+		}
+	}
 	if !strings.HasPrefix(clean, "{") {
 		return nil
 	}
@@ -619,6 +648,31 @@ func isContextOverflow(err error) bool {
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "context") &&
 		(strings.Contains(s, "exceed") || strings.Contains(s, "too long") || strings.Contains(s, "overflow"))
+}
+
+func isRateLimit(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "http 429")
+}
+
+// parseRetryAfter extracts "Please try again in Xs" from a 429 error body.
+// Falls back to 5 seconds if the delay cannot be parsed. Capped at 30 seconds.
+func parseRetryAfter(msg string) time.Duration {
+	const fallback = 5 * time.Second
+	// Look for "try again in <number>s" or "try again in <number>.<frac>s"
+	idx := strings.Index(msg, "try again in ")
+	if idx < 0 {
+		return fallback
+	}
+	rest := msg[idx+len("try again in "):]
+	var secs float64
+	if _, err := fmt.Sscanf(rest, "%f", &secs); err != nil || secs <= 0 {
+		return fallback
+	}
+	d := time.Duration(secs*1000) * time.Millisecond
+	if d > 30*time.Second {
+		d = 30 * time.Second
+	}
+	return d
 }
 
 // toolSummary returns a human-readable description of a tool call's key arguments.
