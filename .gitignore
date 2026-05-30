@@ -19,3 +19,6 @@ Thumbs.db
 
 # session data
 .mini-agent/
+
+# reference code — never push
+inspiration-code-do-not-push/
