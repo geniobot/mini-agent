@@ -25,9 +25,13 @@
 
 ### Phase 6 — Tool expansion (partial)
 - [x] 6.1 `web_fetch` tool (stdlib HTTP, HTML strip, 32 KB cap)
+- [x] 6.2 `search_files` tool (filepath.Walk, case-insensitive, grep output, binary skip)
 - [x] Telegram bot mode (`--telegram`, long-polling, allowlist security)
 - [x] `/goal` persistent goal mode (pause/resume, state to disk, loop detection)
 - [x] `/goal` premature-DONE fix (countToolCalls, adaptive directive)
+- [x] CONTEXT.md injection (`--no-context` flag, 4 KB cap, shown in startup banner)
+- [x] `/models` command (lists Ollama models, marks active)
+- [x] `--version` flag (prints version and exits)
 
 ---
 
@@ -45,26 +49,9 @@
   - 3B: reliable file ops and goal mode (recommended minimum)
   - 7B: complex reasoning, multi-step goals, web tasks
 
-### UX micro-wins (Tier 5, but tiny effort)
-- [ ] `/models` command — call `llm.ListModels()`, print available models (data already fetched at startup)
-- [ ] `--version` flag — print version string and exit
-
 ---
 
 ## 🔲 Open — Tier 2 (Phase 6: remaining tools)
-
-### 6.2 `search_files` tool ← best next feature
-- [ ] Create `internal/tools/search.go`
-  - `SearchFiles(pattern, path string, maxResults int) (string, error)`
-  - `filepath.Walk` + case-insensitive match
-  - Returns `file:line: content` (grep-compatible format)
-  - Skips `.git/`, `node_modules/`, `vendor/`, binary files (null-byte check)
-  - Caps at 50 results (configurable)
-  - Returns "no matches found" string (not an error) when empty
-- [ ] Register as `search_files` in registry + config key `enable_search_files: true`
-- [ ] Add to system prompt examples in config.yaml
-- [ ] Add to fallback parser allowed list
-- [ ] Unit tests
 
 ### 6.3 `git` tool
 - [ ] Create `internal/tools/git.go`
