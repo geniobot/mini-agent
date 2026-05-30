@@ -23,16 +23,20 @@ import (
 )
 
 type Loop struct {
-	cfg         *config.Config
-	client      llm.Client
-	session     *session.Session
-	registry    *tools.Registry
-	maxCtx      int
-	savePath    string         // empty = no session persistence
-	quiet       bool           // suppress decoration; only emit clean output
-	logger      *runlog.Logger // nil = no run log
-	goal        *GoalState     // non-nil while a /goal is active or paused
-	contextFile string         // set when CONTEXT.md is loaded; printed in startup banner
+	cfg             *config.Config
+	client          llm.Client            // current active client (swapped during goal escalation)
+	defaultClient   llm.Client            // original client — restored after each goal
+	fallbackClient  llm.Client            // nil when no fallback is configured
+	activeProvider  config.ProviderConfig // mirrors which client is active
+	defaultProvider config.ProviderConfig
+	session         *session.Session
+	registry        *tools.Registry
+	maxCtx          int
+	savePath        string         // empty = no session persistence
+	quiet           bool           // suppress decoration; only emit clean output
+	logger          *runlog.Logger // nil = no run log
+	goal            *GoalState     // non-nil while a /goal is active or paused
+	contextFile     string         // set when CONTEXT.md is loaded; printed in startup banner
 }
 
 type fallbackToolRequest struct {
@@ -40,14 +44,49 @@ type fallbackToolRequest struct {
 	Arguments json.RawMessage `json:"arguments"`
 }
 
+func buildClient(p config.ProviderConfig) llm.Client {
+	switch p.Type {
+	case "openai_compat":
+		return llm.NewOpenAI(p.BaseURL, os.Getenv(p.APIKeyEnv), p.Model)
+	default: // "ollama"
+		return llm.NewOllama(p.Host)
+	}
+}
+
 func New(cfg *config.Config) *Loop {
-	ctx := numCtx(cfg.Ollama.Options)
+	var defProvider config.ProviderConfig
+	if len(cfg.Providers) == 0 {
+		// Backwards-compat: synthesize a ProviderConfig from the ollama block.
+		defProvider = config.ProviderConfig{
+			Type:      "ollama",
+			Host:      cfg.Ollama.Host,
+			Model:     cfg.Ollama.Model,
+			Stream:    cfg.Ollama.Stream,
+			KeepAlive: cfg.Ollama.KeepAlive,
+			Options:   cfg.Ollama.Options,
+		}
+	} else {
+		defProvider = cfg.Providers[cfg.DefaultProvider]
+	}
+
+	defClient := buildClient(defProvider)
+	var fbClient llm.Client
+	if cfg.FallbackProvider != "" {
+		fbProvider := cfg.Providers[cfg.FallbackProvider]
+		fbClient = buildClient(fbProvider)
+	}
+
+	ctx := numCtx(defProvider.Options)
 	return &Loop{
-		cfg:      cfg,
-		client:   llm.NewOllama(cfg.Ollama.Host),
-		session:  session.New(cfg.Agent.SystemPrompt, cfg.Agent.MaxHistory, ctx),
-		registry: tools.New(cfg.Tools),
-		maxCtx:   ctx,
+		cfg:             cfg,
+		client:          defClient,
+		defaultClient:   defClient,
+		fallbackClient:  fbClient,
+		activeProvider:  defProvider,
+		defaultProvider: defProvider,
+		session:         session.New(cfg.Agent.SystemPrompt, cfg.Agent.MaxHistory, ctx),
+		registry:        tools.New(cfg.Tools),
+		maxCtx:          ctx,
 	}
 }
 
@@ -149,11 +188,12 @@ func (l *Loop) Run() error {
 			l.printModels()
 			continue
 		case input == "/model":
-			fmt.Printf("  current model: %s\n", l.cfg.Ollama.Model)
+			fmt.Printf("  current model: %s\n", l.activeProvider.Model)
 			continue
 		case strings.HasPrefix(input, "/model "):
 			name := strings.TrimSpace(strings.TrimPrefix(input, "/model "))
-			l.cfg.Ollama.Model = name
+			l.activeProvider.Model = name
+			l.defaultProvider.Model = name
 			l.printf("%s[model → %s]%s\n", ansiTeal, name, ansiReset)
 			continue
 		case strings.HasPrefix(input, "/load "):
@@ -241,9 +281,20 @@ func (l *Loop) printHelp() {
 func (l *Loop) printStatus() {
 	const sep = "──────────────────────────────────────────────────"
 	fmt.Printf("\n%s%s%s\n", ansiDim, sep, ansiReset)
-	fmt.Printf("  %s◆%s  model     %s\n", ansiTeal, ansiReset, l.cfg.Ollama.Model)
-	host := strings.TrimPrefix(l.cfg.Ollama.Host, "http://")
-	fmt.Printf("  %s◆%s  host      %s\n", ansiTeal, ansiReset, host)
+	providerName := l.cfg.DefaultProvider
+	if providerName == "" {
+		providerName = "ollama"
+	}
+	fmt.Printf("  %s◆%s  provider  %s (%s)\n", ansiTeal, ansiReset, providerName, l.activeProvider.Type)
+	fmt.Printf("  %s◆%s  model     %s\n", ansiTeal, ansiReset, l.activeProvider.Model)
+	var endpoint string
+	if l.activeProvider.Type == "ollama" {
+		endpoint = strings.TrimPrefix(l.activeProvider.Host, "http://")
+		endpoint = strings.TrimPrefix(endpoint, "https://")
+	} else {
+		endpoint = l.activeProvider.BaseURL
+	}
+	fmt.Printf("  %s◆%s  endpoint  %s\n", ansiTeal, ansiReset, endpoint)
 	tokens := session.EstimateTokens(l.session.Snapshot())
 	fmt.Printf("  %s◆%s  tokens    %d / %d\n", ansiTeal, ansiReset, tokens, l.maxCtx)
 	fmt.Printf("  %s◆%s  history   %d messages\n", ansiTeal, ansiReset, len(l.session.Messages))
@@ -261,8 +312,8 @@ func (l *Loop) unloadModel() {
 		l.printf("%s[unload not supported by this backend]%s\n", ansiDim, ansiReset)
 		return
 	}
-	l.printf("%s[unloading %s...]%s\n", ansiDim, l.cfg.Ollama.Model, ansiReset)
-	if err := u.Unload(l.cfg.Ollama.Model); err != nil {
+	l.printf("%s[unloading %s...]%s\n", ansiDim, l.activeProvider.Model, ansiReset)
+	if err := u.Unload(l.activeProvider.Model); err != nil {
 		fmt.Printf("[error] %v\n", err)
 		return
 	}
@@ -284,8 +335,8 @@ func (l *Loop) loadFileIntoContext(path string) {
 
 // pingOllama checks Ollama connectivity. In display mode it prints a status line.
 func (l *Loop) pingOllama(display bool) error {
-	host := strings.TrimPrefix(l.cfg.Ollama.Host, "http://")
-	if err := llm.Ping(l.cfg.Ollama.Host); err != nil {
+	host := strings.TrimPrefix(l.activeProvider.Host, "http://")
+	if err := llm.Ping(l.activeProvider.Host); err != nil {
 		msg := fmt.Sprintf("ollama not reachable at %s — is it running?", host)
 		if display {
 			fmt.Printf("  \033[91m✗\033[0m  %s\n\n", msg)
@@ -299,11 +350,11 @@ func (l *Loop) pingOllama(display bool) error {
 	suffix := host
 	if ml, ok := l.client.(llm.ModelLister); ok {
 		if models, err := ml.ListModels(); err == nil {
-			found := slices.Contains(models, l.cfg.Ollama.Model)
+			found := slices.Contains(models, l.activeProvider.Model)
 			suffix = fmt.Sprintf("%s (%d models available)", host, len(models))
 			if !found {
 				suffix += fmt.Sprintf(" \033[33m— model %q not found, run: ollama pull %s\033[0m",
-					l.cfg.Ollama.Model, l.cfg.Ollama.Model)
+					l.activeProvider.Model, l.activeProvider.Model)
 			}
 		}
 	}
@@ -444,12 +495,12 @@ func (l *Loop) chatOnceWith(ctx context.Context, msgs []session.Message) (sessio
 	var isToolCall bool
 
 	err := l.client.ChatStream(ctx, llm.ChatRequest{
-		Model:     l.cfg.Ollama.Model,
+		Model:     l.activeProvider.Model,
 		Messages:  msgs,
-		Stream:    l.cfg.Ollama.Stream,
+		Stream:    l.activeProvider.Stream,
 		Tools:     reqTools,
-		Options:   l.cfg.Ollama.Options,
-		KeepAlive: l.cfg.Ollama.KeepAlive,
+		Options:   l.activeProvider.Options,
+		KeepAlive: l.activeProvider.KeepAlive,
 	}, func(chunk llm.ChatChunk) error {
 		if chunk.Message.Content != "" {
 			content.WriteString(chunk.Message.Content)
@@ -704,7 +755,7 @@ func (l *Loop) printModels() {
 	}
 	fmt.Printf("\n%s[%d models available]%s\n", ansiDim, len(models), ansiReset)
 	for _, m := range models {
-		if m == l.cfg.Ollama.Model {
+		if m == l.activeProvider.Model {
 			fmt.Printf("  %s●%s %s %s(active)%s\n", ansiTeal, ansiReset, m, ansiDim, ansiReset)
 		} else {
 			fmt.Printf("  %s·%s %s\n", ansiDim, ansiReset, m)

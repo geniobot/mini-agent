@@ -60,7 +60,14 @@ func main() {
 	}
 
 	if *modelFlag != "" {
-		cfg.Ollama.Model = *modelFlag
+		if len(cfg.Providers) == 0 {
+			cfg.Ollama.Model = *modelFlag
+		} else {
+			if p, ok := cfg.Providers[cfg.DefaultProvider]; ok {
+				p.Model = *modelFlag
+				cfg.Providers[cfg.DefaultProvider] = p
+			}
+		}
 	}
 
 	loop := agent.New(cfg)
