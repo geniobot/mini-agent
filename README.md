@@ -50,6 +50,7 @@ Runs comfortably on hardware as old as a 2012 Mac Mini. No Python, no vector dat
 - [Commands](#commands)
 - [CLI Flags](#cli-flags)
 - [Configuration](#configuration)
+- [Multi-Provider Support](#multi-provider-support)
 - [Tools](#tools)
 - [Telegram Bot](#telegram-bot)
 - [Hardware Guide](#hardware-guide)
@@ -487,6 +488,79 @@ tools:
 ```
 
 Works well with general-purpose models like `gemma2:2b` or `llama3.2:1b`.
+
+---
+
+## Multi-Provider Support
+
+mini-agent supports three deployment modes. The `ollama:` block from earlier versions continues to work without any changes.
+
+### Local-only (backwards-compatible)
+
+Use the existing `ollama:` block — no changes needed:
+
+```yaml
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen2.5-coder:1.5b"
+```
+
+### Cloud-only (e.g. Raspberry Pi without Ollama)
+
+Define one `openai_compat` provider pointing at any OpenAI-compatible endpoint:
+
+```yaml
+providers:
+  main:
+    type: openai_compat
+    base_url: "https://api.groq.com/openai/v1"
+    api_key_env: "GROQ_API_KEY"       # name of env var — key never goes in config
+    model: "llama-3.3-70b-versatile"
+    stream: true
+default_provider: main
+```
+
+Supported endpoints include OpenRouter, Groq, LM Studio, Deepseek, Together, and any other server that speaks the OpenAI Chat Completions API.
+
+**Security:** `api_key_env` holds the environment variable *name*, not the key itself. Set the key in your shell:
+
+```bash
+export GROQ_API_KEY="gsk_..."
+```
+
+### Mixed — local primary, cloud fallback
+
+For most tasks the local model runs. After `fallback_after_failures` consecutive goal steps that produce no tool call, the agent escalates to the cloud provider for the rest of that `/goal` or `--run` session:
+
+```yaml
+providers:
+  local:
+    type: ollama
+    host: "http://localhost:11434"
+    model: "qwen2.5-coder:1.5b"
+    options:
+      temperature: 0.1
+      num_ctx: 4096
+      num_predict: 1024
+  cloud:
+    type: openai_compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+    model: "google/gemma-2-27b-it"
+    stream: true
+
+default_provider: local
+fallback_provider: cloud       # escalate after N stuck steps
+fallback_after_failures: 2
+```
+
+### Checking provider connectivity
+
+```bash
+mini-agent --doctor
+```
+
+`--doctor` shows connectivity status for every configured provider, so you can confirm keys and endpoints are correct before running a goal.
 
 ---
 

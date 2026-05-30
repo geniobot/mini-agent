@@ -1,3 +1,38 @@
+# ── Multi-provider (optional) ──────────────────────────────────────────────────
+# Uncomment to use named providers instead of the ollama: block below.
+# Supports "ollama" (local) and "openai_compat" (any OpenAI-compat API).
+#
+# providers:
+#   local:
+#     type: ollama
+#     host: "http://localhost:11434"
+#     model: "qwen2.5-coder:1.5b"
+#     options:
+#       temperature: 0.1
+#       num_ctx: 4096
+#       num_predict: 1024
+#   cloud:
+#     type: openai_compat
+#     base_url: "https://openrouter.ai/api/v1"
+#     api_key_env: "OPENROUTER_API_KEY"  # export OPENROUTER_API_KEY=sk-or-...
+#     model: "google/gemma-2-27b-it"
+#     stream: true
+#
+# default_provider: local
+# fallback_provider: cloud       # escalate to cloud after N failed steps in /goal
+# fallback_after_failures: 2
+#
+# Cloud-only (e.g. Raspberry Pi without Ollama):
+#   providers:
+#     main:
+#       type: openai_compat
+#       base_url: "https://api.groq.com/openai/v1"
+#       api_key_env: "GROQ_API_KEY"
+#       model: "llama-3.3-70b-versatile"
+#       stream: true
+#   default_provider: main
+# ───────────────────────────────────────────────────────────────────────────────
+
 ollama:
   host: "http://localhost:11434"
   model: "qwen2.5-coder:1.5b"

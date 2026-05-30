@@ -10,8 +10,10 @@
 #   ./scripts/smoke-test.sh            # run all checks
 #   ./scripts/smoke-test.sh --quick    # run a fast subset (file + edit only)
 #   MODEL=qwen2.5-coder:3b ./scripts/smoke-test.sh
+#   PROVIDER=cloud OPENROUTER_API_KEY=sk-or-... ./scripts/smoke-test.sh
 #
-# Requirements: Ollama running locally with the configured model pulled.
+# Requirements: Ollama running locally with the configured model pulled (ollama provider).
+#   For cloud provider: set OPENAI_KEY_ENV (default OPENROUTER_API_KEY) and OPENAI_BASE_URL.
 
 set -uo pipefail
 
@@ -20,10 +22,19 @@ BIN="$ROOT/bin/mini-agent"
 MODEL="${MODEL:-qwen2.5-coder:1.5b}"
 QUICK=false
 [ "${1:-}" = "--quick" ] && QUICK=true
+PROVIDER="${PROVIDER:-ollama}"
 
 # ── colors ────────────────────────────────────────────────────────────────
 if [ -t 1 ]; then GRN='\033[92m'; RED='\033[91m'; DIM='\033[2m'; YEL='\033[33m'; RST='\033[0m'
 else GRN='' RED='' DIM='' YEL='' RST=''; fi
+
+if [ "$PROVIDER" = "cloud" ]; then
+  KEY_ENV="${OPENAI_KEY_ENV:-OPENROUTER_API_KEY}"
+  if [ -z "${!KEY_ENV}" ]; then
+    echo -e "${YEL}Skipping cloud smoke test — $KEY_ENV is not set${RST}"
+    exit 0
+  fi
+fi
 
 PASS=0
 FAIL=0
@@ -36,23 +47,19 @@ if [ ! -x "$BIN" ]; then
 fi
 
 # ── ollama reachability ─────────────────────────────────────────────────────
-if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
-  echo -e "${RED}Ollama is not reachable at localhost:11434 — start it with 'ollama serve'${RST}"
-  exit 1
+if [ "$PROVIDER" != "cloud" ]; then
+  if ! curl -s http://localhost:11434/api/tags >/dev/null 2>&1; then
+    echo -e "${RED}Ollama is not reachable at localhost:11434 — start it with 'ollama serve'${RST}"
+    exit 1
+  fi
 fi
 
 # ── test config: enable every tool, no confirmation prompts ─────────────────
 WORK="$(mktemp -d)"
 CONFIG="$WORK/config.yaml"
-cat > "$CONFIG" <<EOF
-ollama:
-  host: "http://localhost:11434"
-  model: "$MODEL"
-  stream: true
-  options:
-    temperature: 0.1
-    num_ctx: 4096
-    num_predict: 1024
+
+# Shared agent + tools YAML block used by both ollama and cloud configs
+read -r -d '' AGENT_TOOLS_YAML << 'YAML' || true
 agent:
   max_history: 8
   step_timeout_seconds: 120
@@ -83,7 +90,36 @@ tools:
   confirm_run_command: false
   confirm_write_file: false
   allowed_commands: [ls, cat, pwd, grep, find, head, tail]
+YAML
+
+if [ "$PROVIDER" = "cloud" ]; then
+  MODEL="${MODEL:-google/gemma-2-27b-it}"
+  BASE_URL="${OPENAI_BASE_URL:-https://openrouter.ai/api/v1}"
+  KEY_ENV="${OPENAI_KEY_ENV:-OPENROUTER_API_KEY}"
+  cat > "$CONFIG" <<EOF
+providers:
+  cloud:
+    type: openai_compat
+    base_url: "$BASE_URL"
+    api_key_env: "$KEY_ENV"
+    model: "$MODEL"
+    stream: true
+default_provider: cloud
+$AGENT_TOOLS_YAML
 EOF
+else
+  cat > "$CONFIG" <<EOF
+ollama:
+  host: "http://localhost:11434"
+  model: "$MODEL"
+  stream: true
+  options:
+    temperature: 0.1
+    num_ctx: 4096
+    num_predict: 1024
+$AGENT_TOOLS_YAML
+EOF
+fi
 
 cleanup() { rm -rf "$WORK"; }
 trap cleanup EXIT
@@ -111,7 +147,7 @@ file_contains() { [ -f "$WORK/$1" ] && grep -qi "$2" "$WORK/$1"; }
 file_exists()   { [ -f "$WORK/$1" ]; }
 
 echo ""
-echo -e "${DIM}smoke-test — model: $MODEL — workdir: $WORK${RST}"
+echo -e "${DIM}smoke-test — model: $MODEL — provider: $PROVIDER — workdir: $WORK${RST}"
 echo -e "${DIM}(each step calls the model; on CPU this takes a while)${RST}"
 echo ""
 
