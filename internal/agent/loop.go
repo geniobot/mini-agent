@@ -388,6 +388,9 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 		}
 	}
 	if len(assistant.ToolCalls) == 0 {
+		if strings.TrimSpace(assistant.Content) == "" {
+			l.printf("%s(empty response — model produced no output; try a simpler prompt or /model <larger-model>)%s\n", ansiDim, ansiReset)
+		}
 		l.session.AddMessage(assistant)
 		// In quiet mode the content wasn't streamed; print it now.
 		if l.quiet {
@@ -468,6 +471,9 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 	final, err := l.chatOnce(ctx)
 	if err != nil {
 		return err
+	}
+	if strings.TrimSpace(final.Content) == "" {
+		l.printf("%s(no follow-up from model after tool execution)%s\n", ansiDim, ansiReset)
 	}
 	l.session.AddMessage(final)
 	if l.quiet {
