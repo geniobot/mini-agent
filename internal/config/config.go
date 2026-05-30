@@ -149,25 +149,55 @@ func Load(path string) (*Config, error) {
 func (c *Config) Validate() error {
 	var errs []string
 
-	if c.Ollama.Host == "" {
-		errs = append(errs, "ollama.host is required")
-	} else if !strings.HasPrefix(c.Ollama.Host, "http://") && !strings.HasPrefix(c.Ollama.Host, "https://") {
-		errs = append(errs, "ollama.host must start with http:// or https://")
+	if len(c.Providers) == 0 {
+		// Legacy path: validate ollama block as before.
+		if c.Ollama.Host == "" {
+			errs = append(errs, "ollama.host is required")
+		} else if !strings.HasPrefix(c.Ollama.Host, "http://") && !strings.HasPrefix(c.Ollama.Host, "https://") {
+			errs = append(errs, "ollama.host must start with http:// or https://")
+		}
+		if c.Ollama.Model == "" {
+			errs = append(errs, "ollama.model is required")
+		}
+		if nc := intFromOptions(c.Ollama.Options, "num_ctx"); nc != 0 && nc < 64 {
+			errs = append(errs, "ollama.options.num_ctx must be >= 64")
+		}
+		if np := intFromOptions(c.Ollama.Options, "num_predict"); np != 0 && np < 1 {
+			errs = append(errs, "ollama.options.num_predict must be >= 1")
+		}
+	} else {
+		// Multi-provider path.
+		if c.DefaultProvider == "" {
+			errs = append(errs, "default_provider is required when providers: is set")
+		} else if _, ok := c.Providers[c.DefaultProvider]; !ok {
+			errs = append(errs, fmt.Sprintf("default_provider %q does not name a known provider", c.DefaultProvider))
+		} else {
+			def := c.Providers[c.DefaultProvider]
+			if def.Type == "openai_compat" && def.APIKeyEnv != "" && os.Getenv(def.APIKeyEnv) == "" {
+				errs = append(errs, fmt.Sprintf("default provider %q requires env var %s to be set", c.DefaultProvider, def.APIKeyEnv))
+			}
+			if def.Type == "openai_compat" && def.BaseURL == "" {
+				errs = append(errs, fmt.Sprintf("provider %q: base_url is required for type openai_compat", c.DefaultProvider))
+			}
+			if def.Model == "" {
+				errs = append(errs, fmt.Sprintf("provider %q: model is required", c.DefaultProvider))
+			}
+		}
+		if c.FallbackProvider != "" {
+			if _, ok := c.Providers[c.FallbackProvider]; !ok {
+				errs = append(errs, fmt.Sprintf("fallback_provider %q does not name a known provider", c.FallbackProvider))
+			}
+			if c.FallbackProvider == c.DefaultProvider {
+				errs = append(errs, "fallback_provider must differ from default_provider")
+			}
+		}
 	}
-	if c.Ollama.Model == "" {
-		errs = append(errs, "ollama.model is required")
-	}
+
 	if c.Agent.MaxHistory < 1 {
 		errs = append(errs, "agent.max_history must be >= 1")
 	}
 	if c.Agent.MaxGoalSteps < 1 {
 		errs = append(errs, "agent.max_goal_steps must be >= 1")
-	}
-	if nc := intFromOptions(c.Ollama.Options, "num_ctx"); nc != 0 && nc < 64 {
-		errs = append(errs, "ollama.options.num_ctx must be >= 64")
-	}
-	if np := intFromOptions(c.Ollama.Options, "num_predict"); np != 0 && np < 1 {
-		errs = append(errs, "ollama.options.num_predict must be >= 1")
 	}
 
 	if len(errs) > 0 {

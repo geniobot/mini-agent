@@ -166,6 +166,74 @@ agent:
 	}
 }
 
+func TestValidate_providers_valid(t *testing.T) {
+	t.Setenv("MY_API_KEY", "sk-test")
+	cfg := &Config{
+		Providers: map[string]ProviderConfig{
+			"local": {Type: "ollama", Host: "http://localhost:11434", Model: "qwen2.5-coder:1.5b"},
+			"cloud": {Type: "openai_compat", BaseURL: "https://openrouter.ai/api/v1", APIKeyEnv: "MY_API_KEY", Model: "google/gemma-2-27b-it"},
+		},
+		DefaultProvider:  "local",
+		FallbackProvider: "cloud",
+		Agent:            AgentConfig{MaxHistory: 8, MaxGoalSteps: 10},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected no error, got: %v", err)
+	}
+}
+
+func TestValidate_providers_unknownDefault(t *testing.T) {
+	cfg := &Config{
+		Providers: map[string]ProviderConfig{
+			"local": {Type: "ollama", Host: "http://localhost:11434", Model: "x"},
+		},
+		DefaultProvider: "missing",
+		Agent:           AgentConfig{MaxHistory: 8, MaxGoalSteps: 10},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for unknown default_provider")
+	}
+	if !strings.Contains(err.Error(), "default_provider") {
+		t.Errorf("error should mention default_provider, got: %v", err)
+	}
+}
+
+func TestValidate_providers_missingAPIKey_default(t *testing.T) {
+	os.Unsetenv("MISSING_KEY")
+	cfg := &Config{
+		Providers: map[string]ProviderConfig{
+			"cloud": {Type: "openai_compat", BaseURL: "https://api.example.com/v1", APIKeyEnv: "MISSING_KEY", Model: "x"},
+		},
+		DefaultProvider: "cloud",
+		Agent:           AgentConfig{MaxHistory: 8, MaxGoalSteps: 10},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing API key env var on default provider")
+	}
+	if !strings.Contains(err.Error(), "MISSING_KEY") {
+		t.Errorf("error should mention env var name, got: %v", err)
+	}
+}
+
+func TestValidate_providers_missingAPIKey_fallback_ok(t *testing.T) {
+	os.Unsetenv("MISSING_FALLBACK_KEY")
+	cfg := &Config{
+		Providers: map[string]ProviderConfig{
+			"local": {Type: "ollama", Host: "http://localhost:11434", Model: "x"},
+			"cloud": {Type: "openai_compat", BaseURL: "https://api.example.com/v1", APIKeyEnv: "MISSING_FALLBACK_KEY", Model: "x"},
+		},
+		DefaultProvider:  "local",
+		FallbackProvider: "cloud",
+		Agent:            AgentConfig{MaxHistory: 8, MaxGoalSteps: 10},
+	}
+	// Missing API key on fallback-only provider is a warning, not a fatal error.
+	if err := cfg.Validate(); err != nil {
+		t.Errorf("expected no error for missing fallback key, got: %v", err)
+	}
+}
+
 // writeTempConfig writes yaml content to a temp file and returns its path.
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
