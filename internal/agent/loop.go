@@ -333,8 +333,12 @@ func (l *Loop) loadFileIntoContext(path string) {
 	l.printf("%s[loaded %s — %d/%d tok]%s\n", ansiDim, path, tokens, l.maxCtx, ansiReset)
 }
 
-// pingOllama checks Ollama connectivity. In display mode it prints a status line.
+// pingOllama checks Ollama connectivity. Skipped for non-ollama providers.
+// In display mode it prints a status line.
 func (l *Loop) pingOllama(display bool) error {
+	if l.activeProvider.Type != "ollama" && l.activeProvider.Type != "" {
+		return nil
+	}
 	host := strings.TrimPrefix(l.activeProvider.Host, "http://")
 	if err := llm.Ping(l.activeProvider.Host); err != nil {
 		msg := fmt.Sprintf("ollama not reachable at %s — is it running?", host)
