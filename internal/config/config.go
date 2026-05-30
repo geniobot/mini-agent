@@ -14,6 +14,12 @@ type Config struct {
 	Agent    AgentConfig    `yaml:"agent"`
 	Tools    ToolsConfig    `yaml:"tools"`
 	Telegram TelegramConfig `yaml:"telegram"`
+
+	// Multi-provider fields — optional. When absent, the Ollama block is used.
+	Providers             map[string]ProviderConfig `yaml:"providers"`
+	DefaultProvider       string                    `yaml:"default_provider"`
+	FallbackProvider      string                    `yaml:"fallback_provider"`
+	FallbackAfterFailures int                       `yaml:"fallback_after_failures"`
 }
 
 type OllamaConfig struct {
@@ -59,6 +65,20 @@ type TelegramConfig struct {
 	Enabled        bool    `yaml:"enabled"`
 	BotToken       string  `yaml:"bot_token"`        // prefer TELEGRAM_BOT_TOKEN env var
 	AllowedChatIDs []int64 `yaml:"allowed_chat_ids"` // required; empty = deny all
+}
+
+// ProviderConfig describes a single LLM backend.
+// type "ollama"        — local Ollama instance (host + ollama streaming)
+// type "openai_compat" — any OpenAI-compatible /v1/chat/completions endpoint
+type ProviderConfig struct {
+	Type      string         `yaml:"type"`        // "ollama" | "openai_compat"
+	Host      string         `yaml:"host"`        // ollama: base URL
+	BaseURL   string         `yaml:"base_url"`    // openai_compat: base URL
+	APIKeyEnv string         `yaml:"api_key_env"` // openai_compat: env var holding the key
+	Model     string         `yaml:"model"`
+	Stream    bool           `yaml:"stream"`
+	KeepAlive string         `yaml:"keep_alive"`
+	Options   map[string]any `yaml:"options"`
 }
 
 // FindConfig returns the config path to use, checking in priority order:
@@ -112,6 +132,9 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Tools.WebFetchTimeoutSecs <= 0 {
 		cfg.Tools.WebFetchTimeoutSecs = 30
+	}
+	if len(cfg.Providers) > 0 && cfg.FallbackAfterFailures <= 0 {
+		cfg.FallbackAfterFailures = 2
 	}
 	// Bot token from environment variable takes precedence over config file.
 	// This keeps credentials out of version-controlled files.

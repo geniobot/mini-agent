@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"strings"
 	"testing"
 )
@@ -84,4 +85,97 @@ func TestValidate_multipleErrors(t *testing.T) {
 	if !strings.Contains(err.Error(), "ollama.model") {
 		t.Errorf("expected ollama.model error, got: %v", err)
 	}
+}
+
+func TestLoad_providers(t *testing.T) {
+	yaml := `
+providers:
+  local:
+    type: ollama
+    host: "http://localhost:11434"
+    model: "qwen2.5-coder:1.5b"
+    stream: true
+    options:
+      temperature: 0.1
+      num_ctx: 4096
+  cloud:
+    type: openai_compat
+    base_url: "https://openrouter.ai/api/v1"
+    api_key_env: "OPENROUTER_API_KEY"
+    model: "google/gemma-2-27b-it"
+    stream: true
+default_provider: local
+fallback_provider: cloud
+fallback_after_failures: 2
+agent:
+  max_history: 8
+  max_goal_steps: 10
+`
+	f := writeTempConfig(t, yaml)
+	cfg, err := Load(f)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Providers) != 2 {
+		t.Errorf("expected 2 providers, got %d", len(cfg.Providers))
+	}
+	local := cfg.Providers["local"]
+	if local.Type != "ollama" {
+		t.Errorf("expected type ollama, got %q", local.Type)
+	}
+	if local.Model != "qwen2.5-coder:1.5b" {
+		t.Errorf("unexpected local model: %q", local.Model)
+	}
+	cloud := cfg.Providers["cloud"]
+	if cloud.Type != "openai_compat" {
+		t.Errorf("expected type openai_compat, got %q", cloud.Type)
+	}
+	if cloud.APIKeyEnv != "OPENROUTER_API_KEY" {
+		t.Errorf("unexpected api_key_env: %q", cloud.APIKeyEnv)
+	}
+	if cfg.DefaultProvider != "local" {
+		t.Errorf("expected default_provider=local, got %q", cfg.DefaultProvider)
+	}
+	if cfg.FallbackProvider != "cloud" {
+		t.Errorf("expected fallback_provider=cloud, got %q", cfg.FallbackProvider)
+	}
+	if cfg.FallbackAfterFailures != 2 {
+		t.Errorf("expected fallback_after_failures=2, got %d", cfg.FallbackAfterFailures)
+	}
+}
+
+func TestLoad_fallbackAfterFailures_default(t *testing.T) {
+	yaml := `
+providers:
+  main:
+    type: ollama
+    host: "http://localhost:11434"
+    model: "qwen2.5-coder:1.5b"
+default_provider: main
+agent:
+  max_history: 8
+  max_goal_steps: 10
+`
+	f := writeTempConfig(t, yaml)
+	cfg, err := Load(f)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.FallbackAfterFailures != 2 {
+		t.Errorf("expected default fallback_after_failures=2, got %d", cfg.FallbackAfterFailures)
+	}
+}
+
+// writeTempConfig writes yaml content to a temp file and returns its path.
+func writeTempConfig(t *testing.T, content string) string {
+	t.Helper()
+	f, err := os.CreateTemp(t.TempDir(), "config*.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.WriteString(content); err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	return f.Name()
 }
