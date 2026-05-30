@@ -1,10 +1,67 @@
 package agent
 
 import (
+	"context"
 	"testing"
 
+	"mini-agent/internal/config"
+	"mini-agent/internal/llm"
 	"mini-agent/internal/session"
 )
+
+// mockClient records calls and returns a canned response each time.
+type mockClient struct {
+	responses []string
+	calls     int
+}
+
+func (m *mockClient) ChatStream(_ context.Context, _ llm.ChatRequest, onChunk func(llm.ChatChunk) error) error {
+	if m.calls >= len(m.responses) {
+		return onChunk(llm.ChatChunk{Message: session.Message{Role: "assistant", Content: "DONE: finished"}, Done: true})
+	}
+	content := m.responses[m.calls]
+	m.calls++
+	_ = onChunk(llm.ChatChunk{Message: session.Message{Role: "assistant", Content: content}})
+	return onChunk(llm.ChatChunk{Done: true})
+}
+
+func TestGoalEscalation(t *testing.T) {
+	// Primary returns prose (no tool call) twice, triggering escalation.
+	primary := &mockClient{responses: []string{"let me think...", "still thinking..."}}
+	// Fallback returns DONE immediately.
+	fallback := &mockClient{responses: []string{"DONE: created file"}}
+
+	cfg := &config.Config{
+		Ollama: config.OllamaConfig{Host: "http://localhost:11434", Model: "test"},
+		Agent:  config.AgentConfig{MaxHistory: 8, MaxGoalSteps: 10, StepTimeoutSeconds: 30},
+		Providers: map[string]config.ProviderConfig{
+			"local": {Type: "ollama", Host: "http://localhost:11434", Model: "test"},
+			"cloud": {Type: "openai_compat", BaseURL: "https://x.com", Model: "big"},
+		},
+		DefaultProvider:       "local",
+		FallbackProvider:      "cloud",
+		FallbackAfterFailures: 2,
+	}
+	loop := New(cfg)
+	loop.client = primary
+	loop.defaultClient = primary
+	loop.fallbackClient = fallback
+	loop.SetQuiet(true)
+
+	ctx := context.Background()
+	err := loop.runGoal(ctx, "create a file")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if fallback.calls == 0 {
+		t.Error("expected fallback client to be called after escalation")
+	}
+	// After the goal, active client should be restored to primary.
+	if loop.client != primary {
+		t.Error("expected client to be restored to primary after goal")
+	}
+}
 
 func TestParseFallbackToolCall(t *testing.T) {
 	tests := []struct {

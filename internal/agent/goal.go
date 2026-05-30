@@ -57,6 +57,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 	var notes string
 	var prevSig stepSig
+	var consecutiveNoTool int
 
 	for step := 1; step <= maxSteps; step++ {
 		l.printf("%s[step %d/%d]%s\n", ansiTeal, step, maxSteps, ansiReset)
@@ -108,6 +109,21 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		if len(resp.ToolCalls) == 0 {
 			text := truncStr(strings.TrimSpace(resp.Content), maxNoteLen)
 			notes = appendNotes(notes, fmt.Sprintf("step %d [reasoning]", step), text)
+			consecutiveNoTool++
+			if consecutiveNoTool >= l.cfg.FallbackAfterFailures && l.fallbackClient != nil {
+				fbProvider := l.cfg.Providers[l.cfg.FallbackProvider]
+				savedFallback := l.fallbackClient
+				l.client = l.fallbackClient
+				l.activeProvider = fbProvider
+				l.fallbackClient = nil // prevent re-triggering this block
+				defer func() {
+					l.client = l.defaultClient
+					l.activeProvider = l.defaultProvider
+					l.fallbackClient = savedFallback
+				}()
+				l.printf("%s[escalated to fallback provider for this goal]%s\n", ansiYellow, ansiReset)
+				consecutiveNoTool = 0
+			}
 			continue
 		}
 
@@ -152,6 +168,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		prevSig = sig
 
 		notes = appendNotes(notes, fmt.Sprintf("step %d [%s]", step, tc.Function.Name), truncStr(result, maxNoteLen))
+		consecutiveNoTool = 0
 	}
 
 	l.printf("\n%s[goal limit reached after %d steps without DONE signal]%s\n\n", ansiDim, maxSteps, ansiReset)
