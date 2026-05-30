@@ -35,9 +35,9 @@ type Loop struct {
 	savePath        string         // empty = no session persistence
 	quiet           bool           // suppress decoration; only emit clean output
 	logger          *runlog.Logger // nil = no run log
-	goal             *GoalState     // non-nil while a /goal is active or paused
-	contextFile      string         // set when CONTEXT.md is loaded; printed in startup banner
-	lastCompactCount int            // tracks session.CompactCount to detect mid-session trims
+	goal             *GoalState // non-nil while a /goal is active or paused
+	contextFile      string     // set when CONTEXT.md is loaded; printed in startup banner
+	lastPromptTokens int        // previous prompt's token count; drop signals compaction
 }
 
 type fallbackToolRequest struct {
@@ -238,13 +238,13 @@ func (l *Loop) printPrompt() {
 			goalPart = fmt.Sprintf("%s[⏸ goal paused]%s ", ansiYellow, ansiReset)
 		}
 	}
-	compactedNotice := ""
-	if l.session.CompactCount != l.lastCompactCount {
-		compactedNotice = fmt.Sprintf("%s(compacted) %s", ansiDim, ansiReset)
-		l.lastCompactCount = l.session.CompactCount
-	}
 	if l.maxCtx > 0 {
 		tokens := session.EstimateTokens(l.session.Snapshot())
+		compactedNotice := ""
+		if l.lastPromptTokens > 0 && tokens < l.lastPromptTokens {
+			compactedNotice = fmt.Sprintf("%s(compacted) %s", ansiDim, ansiReset)
+		}
+		l.lastPromptTokens = tokens
 		pct := float64(tokens) / float64(l.maxCtx)
 		color := ansiDim
 		switch {
@@ -255,7 +255,7 @@ func (l *Loop) printPrompt() {
 		}
 		fmt.Printf("\n%s%s%s[%d/%d tok]%s > ", compactedNotice, goalPart, color, tokens, l.maxCtx, ansiReset)
 	} else {
-		fmt.Printf("\n%s%s> ", compactedNotice, goalPart)
+		fmt.Printf("\n%s> ", goalPart)
 	}
 }
 

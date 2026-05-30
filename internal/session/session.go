@@ -22,8 +22,7 @@ type Session struct {
 	SystemPrompt string
 	MaxHistory   int
 	MaxTokens    int // 0 = disabled; when set, history is trimmed to stay within budget
-	Messages     []Message
-	CompactCount int // incremented each time compact() drops messages
+	Messages []Message
 }
 
 func New(systemPrompt string, maxHistory int, maxTokens int) *Session {
@@ -86,7 +85,6 @@ func (s *Session) historyStart() int {
 
 func (s *Session) compact() {
 	start := s.historyStart()
-	before := len(s.Messages)
 
 	// Message-count trim: keep at most MaxHistory user/assistant pairs.
 	if s.MaxHistory > 0 {
@@ -103,9 +101,5 @@ func (s *Session) compact() {
 		for EstimateTokens(s.Messages) > budget && len(s.Messages) > start+2 {
 			s.Messages = append(s.Messages[:start], s.Messages[start+2:]...)
 		}
-	}
-
-	if len(s.Messages) < before {
-		s.CompactCount++
 	}
 }
