@@ -2,7 +2,7 @@
 
 > Prioritized task list. Work top-to-bottom within each tier.
 > Reference: PLAN.md for full context and architecture decisions.
-> Last updated: 2026-05-30
+> Last updated: 2026-05-31
 
 ---
 
@@ -36,6 +36,16 @@
 - [x] `/models` command (lists Ollama models, marks active)
 - [x] `--version` flag (prints version and exits)
 
+### Post v2.7.0 fixes
+- [x] `--setup` wizard (provider selection, API key → ~/.zshrc, config patch)
+- [x] Banner shows active provider model/host (not always Ollama block)
+- [x] Token counter visible for cloud providers (default 8192 ctx)
+- [x] Double `/v1` in cloud request URL fixed (strip trailing /v1 from base_url)
+- [x] Empty model response shows actionable notice + model suggestion
+- [x] `(compacted)` notice only fires when token count actually drops
+- [x] Auto-retry on 429 rate limit (parse delay from error, wait, retry ×3)
+- [x] Fallback parser handles prose-prefixed JSON blocks
+
 ---
 
 ## 🔲 Open — Tier 1 (quick wins, do first)
@@ -67,13 +77,6 @@
 ---
 
 ## 🔲 Open — Tier 3 (Phase 7: context intelligence)
-
-### 7.2 CONTEXT.md workspace injection ← high value, low effort
-- [ ] In `agent/loop.go` `New()`: check for `CONTEXT.md` or `.mini-agent/CONTEXT.md` in CWD
-- [ ] If found, prepend as system message capped at 4 KB
-- [ ] Print: `[loaded CONTEXT.md — N tokens]` on startup
-- [ ] Add `--no-context` flag to skip injection
-- [ ] Document in README
 
 ### 7.1 Context summarization (opt-in)
 - [ ] `internal/session/summarize.go` — LLM-based summary before trimming old messages

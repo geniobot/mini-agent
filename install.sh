@@ -3,7 +3,7 @@ set -euo pipefail
 
 REPO="https://github.com/geniobot/mini-agent/archive/refs/heads/main.tar.gz"
 BINARY="mini-agent"
-VERSION="v2.7.0"
+VERSION="v2.7.1"
 INSTALL_DIR="${PREFIX:-$HOME/.local/bin}"
 
 # ── colors (disabled when NO_COLOR is set or stdout is not a terminal) ────────

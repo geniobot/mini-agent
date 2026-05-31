@@ -22,9 +22,9 @@
 [![Ollama](https://img.shields.io/badge/Powered%20by-Ollama-black?style=flat)](https://ollama.com)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS-lightgrey?style=flat)]()
 
-**A lightweight Go CLI that connects to a local [Ollama](https://ollama.com) instance and gives you a fully capable AI agent — chat, autonomous goal execution, and file/shell tools — with zero cloud dependencies.**
+**A lightweight Go CLI agent — chat, autonomous goal execution, and file/shell tools. Runs locally via [Ollama](https://ollama.com) or against any cloud provider (Groq, OpenAI, OpenRouter). No Python, no vector databases, no mandatory SaaS.**
 
-Runs comfortably on hardware as old as a 2012 Mac Mini. No Python, no vector databases, no SaaS.
+Runs comfortably on hardware as old as a 2012 Mac Mini.
 
 </div>
 
@@ -90,7 +90,7 @@ Instead of lengthy prose instructions, the system prompt gives the model a minim
 As the model streams its response, mini-agent monitors the token stream. When it detects the start of a JSON tool call (`{`), it switches to silent mode — the raw JSON never appears in your terminal. You see only clean, human-readable output.
 
 **3. Deterministic fallback parser**  
-If native tool-calling returns nothing, the agent runs a second pass: it extracts any JSON object from the response, validates the tool name and arguments, and executes it. This fallback makes tool use reliable across models that don't fully support the native API.
+If native tool-calling returns nothing, the agent runs a second pass: it finds the JSON tool call in the response — whether it starts the reply cleanly or is embedded after a prose explanation — validates the tool name and arguments, and executes it. This fallback makes tool use reliable across models that don't fully support the native API.
 
 **4. Goal mode working notes**  
 In multi-step goal execution, each step receives a running `notes` string instead of the full chat history. This keeps every step's context bounded at ~500 tokens regardless of how many steps have run — critical for small context windows.
@@ -143,9 +143,10 @@ In multi-step goal execution, each step receives a running `notes` string instea
 
 **Reliability**
 - `--setup` interactive wizard — switch providers (Groq, OpenAI, OpenRouter, Ollama) in seconds
+- Auto-retry on rate limits — parses the provider's suggested delay and waits, up to 3 retries
 - `--doctor` validates config, Ollama connectivity, and model availability
 - Config validation on startup — bad values reported clearly before connecting
-- Deterministic JSON fallback parser for tool calling on small models
+- Deterministic JSON fallback parser — handles clean JSON and prose-prefixed JSON blocks
 
 **Developer experience**
 - Professional terminal UI with ANSI colors and live token counter
@@ -162,7 +163,8 @@ In multi-step goal execution, each step receives a running `notes` string instea
 | Requirement | Notes |
 |---|---|
 | **Go 1.22+** | [Download](https://go.dev/dl/) |
-| **Ollama** | [Install](https://ollama.com/download) — must be running locally |
+| **Ollama** *(local mode)* | [Install](https://ollama.com/download) — required only for local models |
+| **API key** *(cloud mode)* | Groq (free), OpenAI, or OpenRouter — run `mini-agent --setup` to configure |
 | A supported model | See [Hardware Guide](#hardware-guide) for recommendations |
 
 No other dependencies. The only Go module beyond the standard library is `gopkg.in/yaml.v3` for config parsing.
@@ -212,6 +214,16 @@ rm ~/.local/bin/mini-agent
 ---
 
 ## Quick Start
+
+### Option A — Cloud provider (recommended for first-time setup)
+
+```bash
+mini-agent --setup
+```
+
+The wizard lets you pick Groq, OpenAI, OpenRouter, or Ollama, enter your API key, and writes everything to `~/.mini-agent/config.yaml` automatically. Groq has a free tier — no credit card required.
+
+### Option B — Local Ollama
 
 **1. Pull a model**
 
