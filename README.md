@@ -232,21 +232,13 @@ ollama pull qwen2.5-coder:1.5b    # fast, works on 4 GB RAM
 ollama pull qwen2.5-coder:7b      # better quality, needs ~8 GB RAM
 ```
 
-**2. (Optional) Set up a persistent config**
-
-```bash
-mkdir -p ~/.mini-agent
-cp config.yaml ~/.mini-agent/config.yaml
-nano ~/.mini-agent/config.yaml    # adjust model, threads, context size
-```
-
-If `~/.mini-agent/config.yaml` exists, mini-agent uses it automatically from any directory.
-
-**3. Start**
+**2. Start**
 
 ```bash
 mini-agent
 ```
+
+On first run, `~/.mini-agent/config.yaml` is created automatically with sensible defaults. You can edit it later to change the model, thread count, or context size.
 
 You should see the banner, a health check confirming Ollama is reachable, and the prompt:
 
@@ -341,6 +333,21 @@ Goal state and progress notes are saved to `~/.mini-agent/goal.json`. Check stat
 - Ctrl+C pauses (`/goal`) or cancels (`/run`) cleanly
 - Per-step timeout prevents indefinite hangs on slow hardware
 
+> **Model requirement:** goal mode needs a 3B+ model for reliable JSON tool use. If you run `/run` or `/goal` with a 1.5B model, mini-agent prints a warning and suggests switching:
+> ```
+> [warning] qwen2.5-coder:1.5b may be too small for reliable goal/tool use.
+>          Switch to a 3B+ model for best results: /model qwen2.5-coder:3b
+> ```
+
+**Goal history** — every completed or stopped goal is logged to `~/.mini-agent/goals.json`:
+```
+> /goals
+  ✓ 2026-05-31 14:02  create a Flask REST API for a todo list
+    Created app.py, requirements.txt, and README.md
+  ⏹ 2026-05-30 09:15  build a web scraper
+    reached 10 step limit without completion
+```
+
 ### Non-interactive / scripts
 
 mini-agent is designed to be used in shell scripts, cron jobs, and pipelines.
@@ -356,6 +363,9 @@ echo "Result: $summary"
 # Override the model for a single run
 mini-agent --model llama3.2:1b --run "is Ollama running?" --quiet
 
+# Override the system prompt for a single run
+mini-agent --system "you are a strict code reviewer" --run "review main.go"
+
 # Start fresh without loading saved history
 mini-agent --fresh
 
@@ -367,6 +377,41 @@ mini-agent --fresh
 # Respect NO_COLOR for scripts that set it
 NO_COLOR=1 mini-agent --run "list files in /tmp"
 ```
+
+### Pipe / stdin
+
+When stdin is not a TTY, mini-agent reads it, combines it with any trailing question, runs as a one-shot prompt, and exits. `--quiet` and `--plain` are enabled automatically.
+
+```bash
+# Ask a question about a file
+cat main.go | mini-agent "what does this program do?"
+
+# Pipe with --run (--run acts as the question)
+cat error.log | mini-agent --run "what is causing this error?"
+
+# Combine a custom system prompt with piped content
+cat code.py | mini-agent --system "you are a security auditor" "find vulnerabilities"
+
+# Use in a pipeline — only the answer reaches stdout
+cat config.yaml | mini-agent "summarize this config" | tee summary.txt
+
+# Pipe a git diff into a commit message generator
+git diff HEAD~1 | mini-agent "write a conventional commit message for these changes"
+```
+
+### @file — inline file references
+
+Add `@path` anywhere in a message to inject that file's content before your question. Works in chat, `/run`, and pipe mode.
+
+```
+> explain @internal/agent/loop.go
+
+> compare @src/old.py and @src/new.py — what changed?
+
+> /run read @main.go and write a tests.py with one test per function
+```
+
+Paths support `~/` home expansion. Tokens for files that cannot be read are left unchanged in the message.
 
 ### Injecting files into context
 
@@ -393,7 +438,11 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `/goal` | Show current goal status (steps, elapsed, last action) |
 | `/goal resume` | Continue a paused goal from where it left off |
 | `/goal clear` | Stop and discard the current goal |
+| `/goals [N]` | List last N completed/stopped goals with status and timestamp (default: 10) |
 | `/run <goal>` | Quick one-shot goal — up to 10 steps, no persistence |
+| `/retry` | Discard the last response and regenerate it with the same input |
+| `/copy` | Copy the last assistant response to the system clipboard |
+| `/save <name>` | Save current session to `~/.mini-agent/sessions/<name>.json` |
 | `/load <file>` | Inject a file into conversation context |
 | `/history [N]` | Show last N conversation messages (default: 6) |
 | `/model [name]` | Show the current model, or switch to `name` without restarting |
@@ -413,18 +462,49 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 |---|---|---|
 | `--config <path>` | auto | Explicit path to config file |
 | `--run <goal>` | — | Run a goal non-interactively and exit with code 0 on success |
-| `--model <name>` | from config | Override the Ollama model for this session |
+| `--batch <file>` | — | Run goals one per line from a file; outputs JSON-lines results to stdout |
+| `--parallel N` | `1` | Number of goals to run concurrently in `--batch` mode |
+| `--model <name>` | from config | Override the model for this session |
+| `--system <text>` | from config | Override the system prompt for this session |
 | `--fresh` | `false` | Skip loading saved session history |
 | `--no-save` | `false` | Do not write session history to disk on exit |
 | `--plain` | `false` | Disable ANSI color codes (also triggered by `NO_COLOR=1`) |
 | `--quiet` | `false` | Suppress all decoration — only the final answer reaches stdout |
 | `--setup` | — | Interactive wizard: pick a provider, enter API key, update config — then exit |
 | `--doctor` | — | Validate config, check Ollama connectivity, verify model — then exit |
+| `--daemon` | — | Run scheduled goals from the `schedule:` config section; exits on SIGTERM |
 | `--telegram` | — | Start Telegram bot mode (requires `TELEGRAM_BOT_TOKEN` env var) |
 | `--no-context` | `false` | Skip auto-loading `CONTEXT.md` from the working directory |
+| `--completion <shell>` | — | Print a shell completion script (`bash` or `zsh`) and exit |
 | `--version` | — | Print version and exit |
 
-**Config file search order:** `--config` flag → `~/.mini-agent/config.yaml` → `./config.yaml`
+**Config file search order:** `--config` flag → `~/.mini-agent/config.yaml` → `./config.yaml` (auto-created on first run if none found)
+
+---
+
+## Shell Completion
+
+mini-agent can generate tab-completion scripts for bash and zsh.
+
+**bash**
+```bash
+mini-agent --completion bash >> ~/.bash_completion
+source ~/.bash_completion
+# Add to ~/.bashrc for persistence:
+echo 'source ~/.bash_completion' >> ~/.bashrc
+```
+
+**zsh**
+```zsh
+mkdir -p ~/.zsh/completions
+mini-agent --completion zsh > ~/.zsh/completions/_mini-agent
+# Add to ~/.zshrc if not already present:
+echo 'fpath=(~/.zsh/completions $fpath)' >> ~/.zshrc
+echo 'autoload -Uz compinit && compinit' >> ~/.zshrc
+source ~/.zshrc
+```
+
+Once installed, `mini-agent --<TAB>` completes all flags.
 
 ---
 

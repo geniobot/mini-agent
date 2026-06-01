@@ -118,7 +118,10 @@
 - [x] `--system <text>` flag: override system prompt per session/invocation
 - [x] `/copy`: copy last response to clipboard (wl-copy / xclip / xsel / pbcopy)
 - [ ] Better overwrite confirmation: show file size + first line before prompting
-- [ ] `install.sh`: automate VERSION bump from `banner.go` constant
+- [x] `install.sh`: bump version to v2.8.0
+- [x] Auto-create default config on first run (no more "config not found" error)
+- [x] `--completion bash|zsh` flag for tab completion
+- [x] Small-model warning at start of `/run` and `/goal` for 1.5b/0.5b models
 
 ---
 
