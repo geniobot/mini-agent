@@ -91,23 +91,65 @@ type ProviderConfig struct {
 
 // FindConfig returns the config path to use, checking in priority order:
 // 1. An explicit path (from --config flag, if non-empty)
-// 2. ~/.mini-agent/config.yaml
-// 3. ./config.yaml (current directory fallback)
+// 2. ./config.yaml (repo / dev usage — only if it already exists)
+// 3. ~/.mini-agent/config.yaml (always returned as the user-install fallback;
+//    Load will auto-create it with defaults on first run if missing)
 func FindConfig(explicit string) string {
 	if explicit != "" {
 		return explicit
 	}
+	if _, err := os.Stat("config.yaml"); err == nil {
+		return "config.yaml"
+	}
 	if home, err := os.UserHomeDir(); err == nil {
-		p := filepath.Join(home, ".mini-agent", "config.yaml")
-		if _, err := os.Stat(p); err == nil {
-			return p
-		}
+		return filepath.Join(home, ".mini-agent", "config.yaml")
 	}
 	return "config.yaml"
 }
 
+// defaultConfigYAML is written to ~/.mini-agent/config.yaml on first run.
+const defaultConfigYAML = `# mini-agent configuration — auto-generated on first run
+# Edit this file to change models, enable tools, or add providers.
+
+ollama:
+  host: "http://localhost:11434"
+  model: "qwen2.5-coder:1.5b"
+  keep_alive: "30m"
+  stream: true
+  options:
+    num_ctx: 2048
+    num_predict: 512
+    num_thread: 4
+
+agent:
+  max_history: 8
+  max_goal_steps: 10
+  step_timeout_seconds: 300
+  system_prompt: |
+    You are a helpful local assistant. Be concise and direct.
+
+tools:
+  enabled: true
+  use_native_tools: false
+  enable_read_file: true
+  enable_write_file: true
+  enable_edit_file: true
+  enable_append_file: true
+  enable_list_dir: true
+  enable_run_command: true
+  confirm_run_command: true
+  confirm_write_file: false
+  allowed_commands: ["ls", "cat", "pwd", "echo", "grep", "find", "git", "python3", "python", "go", "node"]
+`
+
 func Load(path string) (*Config, error) {
 	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		if writeErr := writeDefaultConfig(path); writeErr == nil {
+			fmt.Fprintf(os.Stderr, "  [created default config: %s]\n  [run --setup to configure a provider or change the model]\n\n", path)
+			b, err = os.ReadFile(path)
+		}
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +254,13 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config validation failed:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return nil
+}
+
+func writeDefaultConfig(path string) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(defaultConfigYAML), 0o644)
 }
 
 func intFromOptions(opts map[string]any, key string) int {

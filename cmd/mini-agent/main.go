@@ -32,8 +32,9 @@ func main() {
 	telegramMode := flag.Bool("telegram", false, "start Telegram bot mode (requires TELEGRAM_BOT_TOKEN env var)")
 	daemonMode   := flag.Bool("daemon", false, "run scheduled goals from the 'schedule:' section in config and exit on SIGTERM")
 	noContext    := flag.Bool("no-context", false, "skip loading CONTEXT.md from the working directory")
-	systemFlag   := flag.String("system", "", "override the system prompt for this session")
-	versionFlag  := flag.Bool("version", false, "print version and exit")
+	systemFlag     := flag.String("system", "", "override the system prompt for this session")
+	completionFlag := flag.String("completion", "", "print shell completion script (bash|zsh) and exit")
+	versionFlag    := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
 
 	// Pipe/stdin support: if stdin is not a TTY, read it and combine with any
@@ -55,6 +56,11 @@ func main() {
 				*plain = true
 			}
 		}
+	}
+
+	if *completionFlag != "" {
+		agent.PrintCompletion(*completionFlag)
+		return
 	}
 
 	if *versionFlag {
