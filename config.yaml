@@ -81,6 +81,9 @@ agent:
     Run a git command:
     {"name":"git","arguments":{"subcommand":"status","args":["--short"]}}
 
+    Extract a value from a JSON string:
+    {"name":"json_query","arguments":{"json":"{\"user\":{\"name\":\"Alice\"}}","path":".user.name"}}
+
     Use write_file when asked to: create, write, make, generate, save, build a new file.
     Use edit_file when asked to: change, modify, fix, update part of an existing file.
     Use search_files when asked to: find, search, grep, look for text in files.
@@ -102,6 +105,7 @@ tools:
   web_fetch_timeout_seconds: 30 # per-request timeout for web_fetch
   enable_search_files: true     # search for text across files (pure Go, no grep needed)
   enable_git: false             # set true to allow git commands (requires git in PATH)
+  enable_json_query: false      # set true to allow extracting values from JSON strings
   confirm_run_command: true
   confirm_write_file: false     # set true to prompt before overwriting existing files
   confirm_git_write: true       # prompt before git commands that modify the repo (commit, push, etc.)
@@ -115,6 +119,21 @@ tools:
     - tail
     - sed
     - awk
+
+# ── Scheduled goals (--daemon mode) ─────────────────────────────────────────────
+# Run mini-agent --daemon to start the scheduler. It sleeps until the next due
+# goal, runs it, then sleeps again. Send SIGTERM or Ctrl+C to stop cleanly.
+# Use OS cron or systemd to launch --daemon on boot.
+# Cron fields: minute hour day-of-month month day-of-week
+#
+# schedule:
+#   - cron: "0 8 * * *"          # every day at 8am
+#     goal: "Check disk usage and warn if over 80%"
+#   - cron: "*/30 * * * *"       # every 30 minutes
+#     goal: "Append current timestamp to ~/heartbeat.log"
+#   - cron: "0 9 * * 1"          # every Monday at 9am
+#     goal: "Summarise git log from the past week into ~/weekly.md"
+# ────────────────────────────────────────────────────────────────────────────────
 
 # Telegram bot mode — run with: mini-agent --telegram
 # SECURITY: do NOT put your bot token here. Use the TELEGRAM_BOT_TOKEN env var.

@@ -14,12 +14,19 @@ type Config struct {
 	Agent    AgentConfig    `yaml:"agent"`
 	Tools    ToolsConfig    `yaml:"tools"`
 	Telegram TelegramConfig `yaml:"telegram"`
+	Schedule []ScheduleEntry `yaml:"schedule"`
 
 	// Multi-provider fields — optional. When absent, the Ollama block is used.
 	Providers             map[string]ProviderConfig `yaml:"providers"`
 	DefaultProvider       string                    `yaml:"default_provider"`
 	FallbackProvider      string                    `yaml:"fallback_provider"`
 	FallbackAfterFailures int                       `yaml:"fallback_after_failures"`
+}
+
+// ScheduleEntry defines a single cron-triggered goal for --daemon mode.
+type ScheduleEntry struct {
+	Cron string `yaml:"cron"` // 5-field POSIX cron expression
+	Goal string `yaml:"goal"` // goal text passed to the agent
 }
 
 type OllamaConfig struct {
@@ -51,6 +58,7 @@ type ToolsConfig struct {
 	EnableWebFetch       bool     `yaml:"enable_web_fetch"`
 	EnableSearchFiles    bool     `yaml:"enable_search_files"`
 	EnableGit            bool     `yaml:"enable_git"`
+	EnableJsonQuery      bool     `yaml:"enable_json_query"`
 	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
 	ConfirmGitWrite      bool     `yaml:"confirm_git_write"`
 	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`
@@ -127,7 +135,7 @@ func Load(path string) (*Config, error) {
 		!cfg.Tools.EnableEditFile && !cfg.Tools.EnableAppendFile &&
 		!cfg.Tools.EnableListDir && !cfg.Tools.EnableRunCmd &&
 		!cfg.Tools.EnableWebFetch && !cfg.Tools.EnableSearchFiles &&
-		!cfg.Tools.EnableGit {
+		!cfg.Tools.EnableGit && !cfg.Tools.EnableJsonQuery {
 		cfg.Tools.Enabled = false
 	}
 	if cfg.Tools.WebFetchTimeoutSecs <= 0 {

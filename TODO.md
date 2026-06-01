@@ -57,7 +57,7 @@
 
 ### 5.1 Model tier documentation
 - [ ] Test `/goal` with `qwen2.5-coder:3b` — document whether multi-file goals complete reliably
-- [ ] Update README Hardware Guide with model-tier notes:
+- [x] Update README Hardware Guide with model-tier notes:
   - 1.5B: chat + simple single-file ops (multi-file goals unreliable)
   - 3B: reliable file ops and goal mode (recommended minimum)
   - 7B: complex reasoning, multi-step goals, web tasks
@@ -67,49 +67,56 @@
 ## 🔲 Open — Tier 2 (Phase 6: remaining tools)
 
 ### 6.4 `json_query` tool
-- [ ] Create `internal/tools/json.go`
+- [x] Create `internal/tools/json.go`
   - Dot-path extractor: `.user.name`, `.items[0].id`
   - Pure Go, no jq dependency
   - Returns `null` (not error) when path missing
-- [ ] Register as `json_query` + config key `enable_json_query: true`
-- [ ] Unit tests
+- [x] Register as `json_query` + config key `enable_json_query: true`
+- [x] Unit tests (14 cases, all passing)
 
 ---
 
 ## 🔲 Open — Tier 3 (Phase 7: context intelligence)
 
 ### 7.1 Context summarization (opt-in)
-- [ ] `internal/session/summarize.go` — LLM-based summary before trimming old messages
-- [ ] Config key `agent.summarize_on_compact: false` (default off — adds latency)
-- [ ] Unit tests with mock LLM client
+- [x] `internal/agent/summarize.go` — LLM-based summary of dropped messages (any provider)
+- [x] `session.SetSummary()` — injects summary as protected system message (survives future compaction)
+- [x] `session.DroppedMessages` — compact captures dropped messages for the agent to summarize
+- [x] Config key `agent.summarize_on_compact: false` (default off — adds latency)
+- [x] Unit tests (5 new session tests, all passing)
 
 ### 7.3 Goal memory (`/goals` command)
-- [ ] `internal/session/goals.go` — persist last 100 goal records to `~/.mini-agent/goals.json`
-- [ ] `/goals` command: list recent goals with status, summary, timestamp
-- [ ] Wire into goal.go on completion/failure
-- [ ] Unit tests
+- [x] `internal/session/goals.go` — persist last 100 goal records to `~/.mini-agent/goals.json`
+- [x] `/goals` command: list recent goals with status, summary, timestamp
+- [x] Wire into goal.go on completion/failure
+- [x] Unit tests
 
 ---
 
 ## 🔲 Open — Tier 4 (Phase 8: automation)
 
 ### 8.2 Batch mode
-- [ ] `--batch <file>` flag: run goals one per line, JSON results to stdout
-- [ ] Exit code: 0 all succeeded, 1 any failed
-- [ ] `--parallel N`: goroutine pool for concurrent goals
+- [x] `--batch <file>` flag: run goals one per line, JSON results to stdout
+- [x] Exit code: 0 all succeeded, 1 any failed
+- [x] `--parallel N`: goroutine pool for concurrent goals
 
 ### 8.1 Scheduled goals (`--daemon`)
-- [ ] `schedule:` section in config.yaml with cron expressions
-- [ ] Minimal pure-Go cron parser (5-field POSIX)
-- [ ] `--daemon` flag: sleep/wake loop, PID file, SIGTERM/SIGHUP handling
-- [ ] Unit tests for cron parser
+- [x] `schedule:` section in config.yaml with cron expressions
+- [x] Minimal pure-Go cron parser (5-field POSIX) — `internal/scheduler/cron.go`
+- [x] `--daemon` flag: sleep/wake loop, PID file, SIGTERM/SIGINT handling
+- [x] Unit tests for cron parser (15 cases, all passing)
 
 ---
 
 ## 🔲 Open — Tier 5 (UX polish, low priority)
 
-- [ ] Multiline input: `\` at end of line continues to next line
-- [ ] `/save <name>`: copy session to `~/.mini-agent/sessions/<name>.json`
+- [x] Multiline input: `\` at end of line continues to next line
+- [x] `/save <name>`: copy session to `~/.mini-agent/sessions/<name>.json`
+- [x] `/retry`: discard last response and regenerate
+- [x] Pipe/stdin: `cat file | mini-agent "question"` — auto-quiet, one-shot
+- [x] `@file` syntax: inline file reference in any message (`explain @main.go`)
+- [x] `--system <text>` flag: override system prompt per session/invocation
+- [x] `/copy`: copy last response to clipboard (wl-copy / xclip / xsel / pbcopy)
 - [ ] Better overwrite confirmation: show file size + first line before prompting
 - [ ] `install.sh`: automate VERSION bump from `banner.go` constant
 

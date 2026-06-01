@@ -2,11 +2,13 @@ package agent
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"slices"
@@ -35,9 +37,19 @@ type Loop struct {
 	savePath        string         // empty = no session persistence
 	quiet           bool           // suppress decoration; only emit clean output
 	logger          *runlog.Logger // nil = no run log
-	goal             *GoalState // non-nil while a /goal is active or paused
-	contextFile      string     // set when CONTEXT.md is loaded; printed in startup banner
-	lastPromptTokens int        // previous prompt's token count; drop signals compaction
+	goal             *GoalState  // non-nil while a /goal is active or paused
+	contextFile      string      // set when CONTEXT.md is loaded; printed in startup banner
+	lastPromptTokens int         // previous prompt's token count; drop signals compaction
+	lastGoalRecord   *goalRecord // set by recordGoalResult; consumed by batch mode
+	lastInput        string      // last LLM-dispatched input; used by /retry
+	lastTurnStart    int         // session.Len() before the last LLM turn; used by /retry
+	lastResponse     string      // last assistant text response; used by /copy
+}
+
+// goalRecord captures the outcome of the most recently completed/stopped goal.
+type goalRecord struct {
+	status string // "done" | "stopped"
+	detail string // summary sentence
 }
 
 type fallbackToolRequest struct {
@@ -151,6 +163,28 @@ func (l *Loop) Run() error {
 		if input == "" {
 			continue
 		}
+		// Multiline continuation: a line ending with \ keeps reading.
+		for strings.HasSuffix(input, `\`) {
+			input = strings.TrimSuffix(input, `\`)
+			if !l.quiet {
+				fmt.Print("... ")
+			}
+			if !scanner.Scan() {
+				break
+			}
+			input = input + "\n" + strings.TrimSpace(scanner.Text())
+		}
+
+		// /retry: roll back session to before the last turn and replay the same input.
+		if input == "/retry" {
+			if l.lastInput == "" {
+				l.printf("%s[nothing to retry]%s\n", ansiDim, ansiReset)
+				continue
+			}
+			l.session.TruncateTo(l.lastTurnStart)
+			input = l.lastInput
+			// fall through to LLM dispatch with the restored input
+		}
 
 		// Commands that don't involve the LLM are handled without a context.
 		switch {
@@ -191,6 +225,15 @@ func (l *Loop) Run() error {
 		case input == "/models":
 			l.printModels()
 			continue
+		case input == "/goals" || strings.HasPrefix(input, "/goals "):
+			n := 10
+			if rest := strings.TrimSpace(strings.TrimPrefix(input, "/goals")); rest != "" {
+				if v, err := strconv.Atoi(rest); err == nil && v > 0 {
+					n = v
+				}
+			}
+			l.printGoals(n)
+			continue
 		case input == "/model":
 			fmt.Printf("  current model: %s\n", l.activeProvider.Model)
 			continue
@@ -204,20 +247,29 @@ func (l *Loop) Run() error {
 			path := strings.TrimSpace(strings.TrimPrefix(input, "/load "))
 			l.loadFileIntoContext(path)
 			continue
+		case strings.HasPrefix(input, "/save "):
+			name := strings.TrimSpace(strings.TrimPrefix(input, "/save "))
+			l.saveSession(name)
+			continue
+		case input == "/copy":
+			l.copyLastResponse()
+			continue
 		}
 
 		// LLM operations run under a signal-cancellable context.
 		// Ctrl+C cancels the current generation and returns to the prompt.
 		// A second Ctrl+C (while not in a generation) uses the default handler and exits.
+		l.lastInput = input
+		l.lastTurnStart = l.session.Len()
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		var err error
 		if goal, ok := strings.CutPrefix(input, "/run "); ok {
-			err = l.runGoal(ctx, strings.TrimSpace(goal))
+			err = l.runGoal(ctx, expandAtFiles(strings.TrimSpace(goal)))
 		} else if input == "/goal" || strings.HasPrefix(input, "/goal ") {
 			// /goal handles its own Ctrl+C internally (pauses rather than interrupts).
 			err = l.handleGoalCommand(ctx, input)
 		} else {
-			err = l.handle(ctx, input)
+			err = l.handle(ctx, expandAtFiles(input))
 		}
 		stop()
 
@@ -270,7 +322,11 @@ func (l *Loop) printHelp() {
 		{"/goal resume", "continue a paused goal"},
 		{"/goal clear", "stop and discard the current goal"},
 		{"/run <goal>", "run a quick one-shot goal (max 10 steps)"},
+		{"/retry", "discard last response and regenerate it"},
+		{"/copy", "copy last response to clipboard"},
 		{"/models", "list all models available in Ollama"},
+		{"/goals [N]", "list last N completed goals (default 10)"},
+		{"/save <name>", "save current session to ~/.mini-agent/sessions/<name>.json"},
 		{"/load <file>", "inject a file into conversation context"},
 		{"/history [N]", "show last N messages from session (default 6)"},
 		{"/model [name]", "show or switch the active model"},
@@ -376,7 +432,9 @@ func (l *Loop) pingOllama(display bool) error {
 }
 
 func (l *Loop) handle(ctx context.Context, input string) error {
+	l.session.DroppedMessages = nil // reset before adding so we only see drops from this turn
 	l.session.Add("user", input)
+	l.maybeInjectSummary(ctx)
 	assistant, err := l.chatOnce(ctx)
 	if err != nil {
 		return err
@@ -395,6 +453,7 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 			l.printf("%s(empty response — model produced no output; try a simpler prompt or /model <larger-model>)%s\n", ansiDim, ansiReset)
 		}
 		l.session.AddMessage(assistant)
+		l.lastResponse = assistant.Content
 		// In quiet mode the content wasn't streamed; print it now.
 		if l.quiet {
 			fmt.Println(assistant.Content)
@@ -479,10 +538,28 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 		l.printf("%s(no follow-up from model after tool execution)%s\n", ansiDim, ansiReset)
 	}
 	l.session.AddMessage(final)
+	l.lastResponse = final.Content
 	if l.quiet {
 		fmt.Println(final.Content)
 	}
 	return nil
+}
+
+// maybeInjectSummary checks whether compaction dropped messages this turn and,
+// if summarize_on_compact is enabled, asks the LLM for a brief summary and
+// injects it as a protected system message so key facts survive future trims.
+func (l *Loop) maybeInjectSummary(ctx context.Context) {
+	if !l.cfg.Agent.SummarizeOnCompact || len(l.session.DroppedMessages) == 0 {
+		return
+	}
+	dropped := l.session.DroppedMessages
+	l.session.DroppedMessages = nil
+	l.printf("%s(summarizing compacted context...)%s\n", ansiDim, ansiReset)
+	summary, err := summarizeDropped(ctx, l.client, l.activeProvider.Model, dropped)
+	if err != nil || summary == "" {
+		return
+	}
+	l.session.SetSummary(summary)
 }
 
 // chatOnce sends the current session, retrying on context overflow and rate limits.
@@ -837,6 +914,90 @@ func (l *Loop) printModels() {
 	fmt.Println()
 }
 
+func (l *Loop) saveSession(name string) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Printf("[error] %v\n", err)
+		return
+	}
+	dir := filepath.Join(home, ".mini-agent", "sessions")
+	path := filepath.Join(dir, name+".json")
+	if err := session.Save(path, l.session.Snapshot()); err != nil {
+		fmt.Printf("[error] saving session: %v\n", err)
+		return
+	}
+	msgs := l.session.Snapshot()
+	count := 0
+	for _, m := range msgs {
+		if m.Role != "system" {
+			count++
+		}
+	}
+	l.printf("%s[session saved: %s (%d messages)]%s\n", ansiDim, path, count, ansiReset)
+}
+
+func (l *Loop) copyLastResponse() {
+	if l.lastResponse == "" {
+		l.printf("%s[nothing to copy yet]%s\n", ansiDim, ansiReset)
+		return
+	}
+	// Try clipboard tools in order: Wayland → X11 (xclip) → X11 (xsel) → macOS
+	tools := [][]string{
+		{"wl-copy"},
+		{"xclip", "-selection", "clipboard"},
+		{"xsel", "--clipboard", "--input"},
+		{"pbcopy"},
+	}
+	for _, args := range tools {
+		cmd := exec.Command(args[0], args[1:]...) //nolint:gosec
+		cmd.Stdin = bytes.NewBufferString(l.lastResponse)
+		if err := cmd.Run(); err == nil {
+			l.printf("%s[copied %d chars to clipboard]%s\n", ansiDim, len(l.lastResponse), ansiReset)
+			return
+		}
+	}
+	l.printf("%s[no clipboard tool found — install wl-copy, xclip, or xsel]%s\n", ansiDim, ansiReset)
+}
+
+func (l *Loop) printGoals(n int) {
+	path, err := session.DefaultGoalsPath()
+	if err != nil {
+		fmt.Printf("[error] %v\n", err)
+		return
+	}
+	records, err := session.LoadGoalRecords(path)
+	if err != nil {
+		fmt.Printf("[error] reading goals: %v\n", err)
+		return
+	}
+	if len(records) == 0 {
+		l.printf("%s[no goal history yet]%s\n", ansiDim, ansiReset)
+		return
+	}
+	// Show the most recent n records in reverse-chronological order.
+	start := len(records) - n
+	if start < 0 {
+		start = 0
+	}
+	shown := records[start:]
+	fmt.Printf("\n%s[%d goal(s) shown, %d total]%s\n", ansiDim, len(shown), len(records), ansiReset)
+	for i := len(shown) - 1; i >= 0; i-- {
+		r := shown[i]
+		statusColor := ansiGreen
+		marker := "✓"
+		if r.Status != "done" {
+			statusColor = ansiYellow
+			marker = "⏹"
+		}
+		ts := r.At.Local().Format("2006-01-02 15:04")
+		fmt.Printf("  %s%s%s %s%s%s  %s\n", statusColor, marker, ansiReset, ansiDim, ts, ansiReset, r.Goal)
+		if r.Detail != "" {
+			fmt.Printf("       %s%s%s\n", ansiDim, r.Detail, ansiReset)
+		}
+	}
+	fmt.Println()
+}
+
 // showGoalBanner checks for a persisted goal and prints a notice if one is paused.
 func (l *Loop) showGoalBanner() {
 	statePath, err := GoalStatePath()
@@ -879,6 +1040,7 @@ func (l *Loop) logTool(tc session.ToolCall, result string, execErr error, dur ti
 // recordGoalResult appends a summary of a completed or stopped goal to the session
 // so it persists across restarts and is visible in /history.
 func (l *Loop) recordGoalResult(goal, status, detail string) {
+	l.lastGoalRecord = &goalRecord{status: status, detail: detail}
 	var content string
 	if detail != "" {
 		content = fmt.Sprintf("[goal %s: %q — %s]", status, goal, detail)
@@ -886,6 +1048,21 @@ func (l *Loop) recordGoalResult(goal, status, detail string) {
 		content = fmt.Sprintf("[goal %s: %q]", status, goal)
 	}
 	l.session.Add("assistant", content)
+
+	if path, err := session.DefaultGoalsPath(); err == nil {
+		_ = session.AppendGoalRecord(path, session.GoalRecord{
+			Goal:   goal,
+			Status: status,
+			Detail: detail,
+			At:     time.Now().UTC(),
+		})
+	}
+}
+
+// RunGoalCtx runs a single goal using the provided context (used by batch mode so
+// all concurrent goals share one cancellable context).
+func (l *Loop) RunGoalCtx(ctx context.Context, goal string) error {
+	return l.runGoal(ctx, goal)
 }
 
 func numCtx(opts map[string]any) int {

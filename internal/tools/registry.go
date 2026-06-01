@@ -144,6 +144,13 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			},
 		}})
 	}
+	if r.cfg.EnableJsonQuery {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "json_query",
+			Description: "Extract a value from a JSON string using a dot-path expression (.key, .key.nested, .array[0], .array[0].field). Returns null when path is missing.",
+			Parameters:  schema(map[string]string{"json": "string", "path": "string"}, []string{"json", "path"}),
+		}})
+	}
 	return specs
 }
 
@@ -219,6 +226,12 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			return "", err
 		}
 		return RunGit(a.Subcommand, a.Args, "")
+	case "json_query":
+		var a JsonQueryArgs
+		if err := json.Unmarshal([]byte(arguments), &a); err != nil {
+			return "", err
+		}
+		return JsonQuery(a.JSON, a.Path)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

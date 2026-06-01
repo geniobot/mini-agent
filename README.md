@@ -625,6 +625,25 @@ mini-agent is specifically tuned for CPU-only inference. These configurations ar
 | Modern laptop (no GPU) | 16 GB | `qwen2.5-coder:7b` | 4096 | 8 | Noticeably better output |
 | Any machine with GPU | 8+ GB VRAM | `qwen2.5-coder:14b` | 8192 | — | Ollama uses GPU automatically |
 
+### Model tiers — what works at each size
+
+| Model | RAM | Chat | Single-file ops | `/goal` multi-file | Notes |
+|---|---|---|---|---|---|
+| `qwen2.5-coder:1.5b` | ~1.5 GB | ✓ | ✓ | unreliable | Multi-step goals often stall or loop |
+| `qwen2.5-coder:3b` | ~2.5 GB | ✓ | ✓ | ✓ | Recommended minimum for `/goal` |
+| `qwen2.5-coder:7b` | ~5 GB | ✓ | ✓ | ✓ | Complex reasoning, web tasks, reliable |
+| `qwen2.5-coder:14b` | ~10 GB | ✓ | ✓ | ✓ | Best quality; GPU recommended |
+
+**Practical rule:** use `1.5b` for chat and simple file ops on tight hardware. Switch to `3b` (or higher) when you need `/goal` to reliably complete multi-file tasks.
+
+```bash
+# Switch model for the current session without restarting
+[119/2048 tok] > /model qwen2.5-coder:3b
+
+# Or override for a single run
+mini-agent --model qwen2.5-coder:3b --run "create main.py and README.md"
+```
+
 ### Tuning for constrained hardware
 
 **Reduce RAM usage:**

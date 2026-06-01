@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
 	"mini-agent/internal/agent"
 	"mini-agent/internal/config"
@@ -13,19 +18,44 @@ import (
 )
 
 func main() {
-	configPath := flag.String("config", "", "path to config file (default: ~/.mini-agent/config.yaml or ./config.yaml)")
-	runGoal := flag.String("run", "", "run a goal non-interactively and exit")
-	modelFlag := flag.String("model", "", "override model from config")
-	plain := flag.Bool("plain", false, "disable colors (also respects NO_COLOR env var)")
-	quiet := flag.Bool("quiet", false, "suppress all decoration; only emit the final answer (implies --plain)")
-	fresh := flag.Bool("fresh", false, "start with empty session, skip loading saved history")
-	noSave := flag.Bool("no-save", false, "do not save session on exit")
+	configPath   := flag.String("config", "", "path to config file (default: ~/.mini-agent/config.yaml or ./config.yaml)")
+	runGoal      := flag.String("run", "", "run a goal non-interactively and exit")
+	batchFile    := flag.String("batch", "", "file of goals (one per line) to run and exit; outputs JSON lines")
+	parallel     := flag.Int("parallel", 1, "number of goals to run concurrently in --batch mode")
+	modelFlag    := flag.String("model", "", "override model from config")
+	plain        := flag.Bool("plain", false, "disable colors (also respects NO_COLOR env var)")
+	quiet        := flag.Bool("quiet", false, "suppress all decoration; only emit the final answer (implies --plain)")
+	fresh        := flag.Bool("fresh", false, "start with empty session, skip loading saved history")
+	noSave       := flag.Bool("no-save", false, "do not save session on exit")
 	doctor       := flag.Bool("doctor", false, "check config, Ollama connectivity, and model availability then exit")
 	setupFlag    := flag.Bool("setup", false, "interactive provider setup wizard")
 	telegramMode := flag.Bool("telegram", false, "start Telegram bot mode (requires TELEGRAM_BOT_TOKEN env var)")
+	daemonMode   := flag.Bool("daemon", false, "run scheduled goals from the 'schedule:' section in config and exit on SIGTERM")
 	noContext    := flag.Bool("no-context", false, "skip loading CONTEXT.md from the working directory")
+	systemFlag   := flag.String("system", "", "override the system prompt for this session")
 	versionFlag  := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	// Pipe/stdin support: if stdin is not a TTY, read it and combine with any
+	// positional args or --run value into a single one-shot prompt.
+	if fi, err := os.Stdin.Stat(); err == nil && (fi.Mode()&os.ModeCharDevice) == 0 {
+		if b, err := io.ReadAll(os.Stdin); err == nil && len(b) > 0 {
+			piped := strings.TrimSpace(string(b))
+			question := strings.Join(flag.Args(), " ")
+			if *runGoal != "" {
+				question = *runGoal
+			}
+			if question != "" {
+				*runGoal = piped + "\n\n" + question
+			} else {
+				*runGoal = piped
+			}
+			if !*quiet {
+				*quiet = true
+				*plain = true
+			}
+		}
+	}
 
 	if *versionFlag {
 		fmt.Println(agent.Version)
@@ -51,6 +81,10 @@ func main() {
 		os.Exit(1)
 	}
 
+	if *systemFlag != "" {
+		cfg.Agent.SystemPrompt = *systemFlag
+	}
+
 	if *doctor {
 		agent.RunDoctor(cfg)
 		return
@@ -60,6 +94,33 @@ func main() {
 		loop := agent.New(cfg)
 		if err := telegram.Run(cfg.Telegram.BotToken, cfg.Telegram.AllowedChatIDs, loop); err != nil {
 			fmt.Fprintf(os.Stderr, "telegram error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	if *daemonMode {
+		if err := agent.RunDaemon(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "daemon error: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// Batch mode: each goal gets its own Loop; no shared session or run log.
+	if *batchFile != "" {
+		goals, err := agent.ReadGoals(*batchFile)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "batch: %v\n", err)
+			os.Exit(1)
+		}
+		if len(goals) == 0 {
+			fmt.Fprintf(os.Stderr, "batch: no goals found in %s\n", *batchFile)
+			os.Exit(1)
+		}
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if agent.RunBatch(ctx, cfg, goals, *parallel, os.Stdout) {
 			os.Exit(1)
 		}
 		return
