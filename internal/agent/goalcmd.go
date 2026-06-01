@@ -232,6 +232,10 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 	} else {
 		l.printf("%s[Ctrl+C to pause · /goal clear to stop]%s\n\n", ansiDim, ansiReset)
 	}
+	if isSmallModel(l.activeProvider.Model) {
+		l.printf("%s[warning] %s may be too small for reliable goal/tool use.\n         Switch to a 3B+ model for best results: /model qwen2.5-coder:3b%s\n\n",
+			ansiYellow, l.activeProvider.Model, ansiReset)
+	}
 
 	for {
 		if maxSteps > 0 && g.Steps >= maxSteps {

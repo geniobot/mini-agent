@@ -48,12 +48,31 @@ type stepSig struct {
 	tool, args, result string
 }
 
+// smallModelPatterns are substrings found in model names known to be unreliable
+// in goal/tool-use mode. A warning is shown but execution continues.
+var smallModelPatterns = []string{"1.5b", "0.5b", "1b:"}
+
+func isSmallModel(model string) bool {
+	lower := strings.ToLower(model)
+	for _, p := range smallModelPatterns {
+		if strings.Contains(lower, p) {
+			return true
+		}
+	}
+	return false
+}
+
 func (l *Loop) runGoal(ctx context.Context, goal string) error {
 	maxSteps := l.cfg.Agent.MaxGoalSteps
 	timeout := time.Duration(l.cfg.Agent.StepTimeoutSeconds) * time.Second
 
 	l.printf("\n%s[goal]%s %s\n", ansiCyan, ansiReset, goal)
 	l.printf("%s[max %d steps — Ctrl+C to abort]%s\n\n", ansiDim, maxSteps, ansiReset)
+
+	if isSmallModel(l.activeProvider.Model) {
+		l.printf("%s[warning] %s may be too small for reliable goal/tool use.\n         Switch to a 3B+ model for best results: /model qwen2.5-coder:3b%s\n\n",
+			ansiYellow, l.activeProvider.Model, ansiReset)
+	}
 
 	var notes string
 	var prevSig stepSig
