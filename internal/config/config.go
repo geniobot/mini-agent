@@ -130,6 +130,21 @@ agent:
   step_timeout_seconds: 300
   system_prompt: |
     You are a helpful local assistant. Be concise and direct.
+    For file operations output ONLY a JSON object — no explanation, no markdown.
+    {"name":"write_file","arguments":{"path":"hello.py","content":"..."}}
+    For questions, reply in plain text.
+
+  # Optional: simpler prompt for weak models (1.5B)
+  # system_prompt_weak: |
+  #   You are a local assistant. Keep responses short.
+  #   Output ONLY: {"name":"write_file","arguments":{"path":"hello.py","content":"..."}}
+
+  # Optional: advanced prompt for frontier models (Claude 3.5, GPT-4)
+  # system_prompt_frontier: |
+  #   You are an expert assistant with advanced reasoning.
+  #   Use your full capabilities for complex problems.
+
+  enable_fallback_parser: true
 
 tools:
   enabled: true
