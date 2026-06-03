@@ -250,6 +250,21 @@ You should see the banner, a health check confirming Ollama is reachable, and th
 [119/2048 tok] > 
 ```
 
+### Testing Your Setup
+
+After installation, verify everything works:
+
+```bash
+# Check configuration and connectivity
+mini-agent --doctor
+
+# Test with a simple query
+echo "hello, what is 2+2?" | mini-agent --quiet
+
+# Test with a file creation task
+mini-agent --run "create a file named hello.py with content print('Hello World')"
+```
+
 ---
 
 ## Usage
@@ -614,6 +629,27 @@ mini-agent --setup
 mini-agent
 ```
 
+### Setup by Use Case
+
+**Local-only (privacy-first)**
+```bash
+ollama pull qwen2.5-coder:3b
+mini-agent
+```
+
+**Best reasoning (cloud)**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+mini-agent --setup
+# Select "Claude API"
+```
+
+**Hybrid (local + fallback)**
+```bash
+mini-agent --setup
+# Select both Ollama (default) and Claude (fallback)
+```
+
 ---
 
 ## Model Tiers
@@ -628,6 +664,20 @@ Mini-agent automatically detects model capability tiers and adjusts behavior:
   - Examples: `claude-3-5-sonnet`, `gpt-4-turbo`
 
 No configuration needed — detection is automatic. Weak models get simpler prompts; frontier models leverage full capabilities.
+
+### How to See Your Model's Tier
+
+When mini-agent starts, it shows the detected tier:
+
+```
+Model: qwen2.5-coder:1.5b [tier: weak]
+Model: qwen2.5-coder:3b [tier: standard]
+Model: claude-3-5-sonnet [tier: frontier]
+```
+
+You'll also see tier-specific behavior:
+- **Weak models**: Simpler prompts, fallback JSON parsing logs show `[weak-model-fallback]`
+- **Frontier models**: Advanced reasoning enabled, full context available
 
 ---
 
