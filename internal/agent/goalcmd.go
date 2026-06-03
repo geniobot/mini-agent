@@ -304,7 +304,10 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 
 		// Fallback JSON parsing.
 		if len(resp.ToolCalls) == 0 && l.registry.Enabled() {
-			if tc := parseFallbackToolCall(resp.Content); len(tc) > 0 {
+			if tc, usedFallback := parseFallbackToolCall(resp.Content, l.ModelTier); len(tc) > 0 {
+				if usedFallback {
+					l.printf("[fallback tool parse — weak-model output required recovery]\n")
+				}
 				resp.ToolCalls = tc
 			}
 		}
