@@ -50,6 +50,8 @@ Runs comfortably on hardware as old as a 2012 Mac Mini.
 - [Commands](#commands)
 - [CLI Flags](#cli-flags)
 - [Configuration](#configuration)
+- [Provider Support](#provider-support)
+- [Model Tiers](#model-tiers)
 - [Multi-Provider Support](#multi-provider-support)
 - [Tools](#tools)
 - [Telegram Bot](#telegram-bot)
@@ -582,6 +584,50 @@ tools:
 ```
 
 Works well with general-purpose models like `gemma2:2b` or `llama3.2:1b`.
+
+---
+
+## Provider Support
+
+Mini-agent supports multiple LLM backends:
+
+| Provider | Type | Best For | Setup |
+|----------|------|----------|-------|
+| **Ollama** (local) | `ollama` | Limited hardware, offline, privacy | `ollama pull model` |
+| **Claude API** | `anthropic` | Best reasoning, complex goals | `export ANTHROPIC_API_KEY=...` |
+| **OpenRouter** | `openai_compat` | Cost-effective, many models | `export OPENROUTER_API_KEY=...` |
+| **Groq** | `openai_compat` | Fast inference | `export GROQ_API_KEY=...` |
+
+### Quick Start by Provider
+
+**Local (Ollama):**
+```bash
+ollama pull qwen2.5-coder:3b
+mini-agent
+```
+
+**Cloud (Claude API):**
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+mini-agent --setup
+# Select "Claude API"
+mini-agent
+```
+
+---
+
+## Model Tiers
+
+Mini-agent automatically detects model capability tiers and adjusts behavior:
+
+- **Weak** (1.5B–2B): Simplified instructions, shorter context, graceful error recovery
+  - Examples: `qwen2.5-coder:1.5b`, `phi:2b`, `tinyllama`
+- **Standard** (3B–70B, older Claude): Balanced for limited hardware and general use
+  - Examples: `qwen2.5-coder:3b`, `claude-3-opus`, `llama2:7b`
+- **Frontier** (Claude 3.5, GPT-4): Advanced reasoning, multi-file projects, complex goals
+  - Examples: `claude-3-5-sonnet`, `gpt-4-turbo`
+
+No configuration needed — detection is automatic. Weak models get simpler prompts; frontier models leverage full capabilities.
 
 ---
 
