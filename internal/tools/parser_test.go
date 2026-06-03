@@ -18,7 +18,7 @@ func TestParseToolCallStrictJSON(t *testing.T) {
 			modelTier: "standard",
 			expected: &ToolCall{
 				Name: "write_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path":    "hello.py",
 					"content": "print('hi')\n",
 				},
@@ -31,7 +31,7 @@ func TestParseToolCallStrictJSON(t *testing.T) {
 			modelTier: "standard",
 			expected: &ToolCall{
 				Name: "read_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path": "hello.py",
 				},
 			},
@@ -50,7 +50,7 @@ func TestParseToolCallStrictJSON(t *testing.T) {
 			modelTier: "standard",
 			expected: &ToolCall{
 				Name: "write_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path":    "out.txt",
 					"content": "done",
 				},
@@ -128,7 +128,7 @@ func TestParseToolCallWeakModelFallback(t *testing.T) {
 			modelTier: "weak",
 			expected: &ToolCall{
 				Name: "read_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path": "config.yaml",
 				},
 			},
@@ -163,7 +163,7 @@ func TestParseToolCallWeakModelFallback(t *testing.T) {
 			modelTier: "weak",
 			expected: &ToolCall{
 				Name: "write_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path":    "test.txt",
 					"content": "hello",
 				},
@@ -176,7 +176,7 @@ func TestParseToolCallWeakModelFallback(t *testing.T) {
 			modelTier: "weak",
 			expected: &ToolCall{
 				Name: "read_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path": "file.txt",
 				},
 			},
@@ -188,7 +188,7 @@ func TestParseToolCallWeakModelFallback(t *testing.T) {
 			modelTier: "weak",
 			expected: &ToolCall{
 				Name: "write_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path":    "notes.txt",
 					"content": "tip 1",
 				},

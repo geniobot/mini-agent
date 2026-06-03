@@ -762,11 +762,10 @@ func isRateLimit(err error) bool {
 func parseRetryAfter(msg string) time.Duration {
 	const fallback = 5 * time.Second
 	// Look for "try again in <number>s" or "try again in <number>.<frac>s"
-	idx := strings.Index(msg, "try again in ")
-	if idx < 0 {
+	_, rest, found := strings.Cut(msg, "try again in ")
+	if !found {
 		return fallback
 	}
-	rest := msg[idx+len("try again in "):]
 	var secs float64
 	if _, err := fmt.Sscanf(rest, "%f", &secs); err != nil || secs <= 0 {
 		return fallback

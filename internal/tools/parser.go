@@ -9,8 +9,8 @@ import (
 
 // ToolCall represents a parsed tool invocation
 type ToolCall struct {
-	Name      string                 `json:"name"`
-	Arguments map[string]interface{} `json:"arguments"`
+	Name      string         `json:"name"`
+	Arguments map[string]any `json:"arguments"`
 }
 
 // ParseToolCall parses tool invocations from LLM output.
@@ -86,7 +86,7 @@ func extractFromProse(text string) (*ToolCall, error) {
 
 			return &ToolCall{
 				Name: "write_file",
-				Arguments: map[string]interface{}{
+				Arguments: map[string]any{
 					"path":    path,
 					"content": content,
 				},

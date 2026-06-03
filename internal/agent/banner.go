@@ -67,10 +67,7 @@ func printBanner(cfg *config.Config, modelTier string) {
 	fmt.Println()
 
 	tagline := "local · lightweight · fast"
-	padding := 44 - len(tagline)
-	if padding < 1 {
-		padding = 1
-	}
+	padding := max(1, 44-len(tagline))
 	fmt.Printf("  %s%s%s%s%s\n", ansiDim, tagline, strings.Repeat(" ", padding), version, ansiReset)
 	fmt.Printf("  %s%s%s\n", ansiDim, sep, ansiReset)
 
