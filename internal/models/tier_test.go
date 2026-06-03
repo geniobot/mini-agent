@@ -30,13 +30,8 @@ func TestDetectTier(t *testing.T) {
 			expected: "frontier",
 		},
 		{
-			name:     "frontier: claude-opus",
-			model:    "claude-opus",
-			expected: "frontier",
-		},
-		{
-			name:     "frontier: claude-opus-4",
-			model:    "claude-opus-4",
+			name:     "frontier: o1-mini",
+			model:    "o1-mini",
 			expected: "frontier",
 		},
 		{
@@ -51,6 +46,16 @@ func TestDetectTier(t *testing.T) {
 		},
 
 		// Standard tier tests
+		{
+			name:     "standard: claude-opus",
+			model:    "claude-opus",
+			expected: "standard",
+		},
+		{
+			name:     "standard: claude-opus-4",
+			model:    "claude-opus-4",
+			expected: "standard",
+		},
 		{
 			name:     "standard: claude-3-opus",
 			model:    "claude-3-opus",
@@ -94,6 +99,31 @@ func TestDetectTier(t *testing.T) {
 		{
 			name:     "standard: qwen2.5-coder:7b",
 			model:    "qwen2.5-coder:7b",
+			expected: "standard",
+		},
+		{
+			name:     "standard: claude-3-haiku-20240307",
+			model:    "claude-3-haiku-20240307",
+			expected: "standard",
+		},
+		{
+			name:     "standard: claude-3-haiku",
+			model:    "claude-3-haiku",
+			expected: "standard",
+		},
+		{
+			name:     "standard: phi3",
+			model:    "phi3",
+			expected: "standard",
+		},
+		{
+			name:     "standard: phi3:mini",
+			model:    "phi3:mini",
+			expected: "standard",
+		},
+		{
+			name:     "standard: phi3:medium",
+			model:    "phi3:medium",
 			expected: "standard",
 		},
 		{

@@ -8,7 +8,7 @@ func DetectTier(modelName string) string {
 	lower := strings.ToLower(modelName)
 
 	// Frontier tier: latest, most capable models
-	if contains(lower, "claude-3-5", "gpt-4", "o1", "claude-opus") {
+	if contains(lower, "claude-3-5", "gpt-4", "o1-") {
 		return "frontier"
 	}
 
@@ -17,14 +17,17 @@ func DetectTier(modelName string) string {
 		return "standard"
 	}
 
-	// Weak tier: small models that need simpler instructions
-	if contains(lower, "1.5b", "0.5b", "phi", "tinyllama") {
-		return "weak"
+	// 3B and 7B are standard (sweet spot for limited hardware)
+	// Check these before weak tier so phi3 doesn't fall through to weak
+	if contains(lower, "3b", "7b", "mistral-7b", "llama2:7b", "phi3") {
+		return "standard"
 	}
 
-	// 3B and 7B are standard (sweet spot for limited hardware)
-	if contains(lower, "3b", "7b", "mistral-7b", "llama2:7b") {
-		return "standard"
+	// Weak tier: small models that need simpler instructions
+	// NOTE: Size checks (1.5b, 3b, 7b) are evaluated in order.
+	// Weak models are checked after standard so phi3 and 3b/7b don't fall through to weak.
+	if contains(lower, "1.5b", "0.5b", "phi", "tinyllama") {
+		return "weak"
 	}
 
 	// Default: assume capable unless proven otherwise
