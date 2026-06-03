@@ -1,6 +1,7 @@
 # ── Multi-provider (optional) ──────────────────────────────────────────────────
 # Uncomment to use named providers instead of the ollama: block below.
-# Supports "ollama" (local) and "openai_compat" (any OpenAI-compat API).
+# Supports "ollama" (local), "openai_compat" (any OpenAI-compat API), and
+# "anthropic" (Claude API — uses OpenAI-compatible endpoint under the hood).
 #
 # providers:
 #   local:
@@ -21,6 +22,18 @@
 # default_provider: local
 # fallback_provider: cloud       # escalate to cloud after N failed steps in /goal
 # fallback_after_failures: 2
+#
+# Claude (Anthropic) provider — type "anthropic" routes to the OpenAI-compat handler:
+#   providers:
+#     claude:
+#       type: anthropic
+#       api_key_env: "ANTHROPIC_API_KEY"  # export ANTHROPIC_API_KEY=sk-ant-...
+#       model: "claude-3-5-sonnet-20241022"
+#       stream: true
+#       options:
+#         temperature: 0.2
+#         max_tokens: 2048
+#   default_provider: claude
 #
 # Cloud-only (e.g. Raspberry Pi without Ollama):
 #   providers:

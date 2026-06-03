@@ -81,8 +81,9 @@ type TelegramConfig struct {
 // ProviderConfig describes a single LLM backend.
 // type "ollama"        — local Ollama instance (host + ollama streaming)
 // type "openai_compat" — any OpenAI-compatible /v1/chat/completions endpoint
+// type "anthropic"     — Anthropic Claude API (OpenAI-compatible; routed to openai_compat handler)
 type ProviderConfig struct {
-	Type      string         `yaml:"type"`        // "ollama" | "openai_compat"
+	Type      string         `yaml:"type"`        // "ollama" | "openai_compat" | "anthropic"
 	Host      string         `yaml:"host"`        // ollama: base URL
 	BaseURL   string         `yaml:"base_url"`    // openai_compat: base URL
 	APIKeyEnv string         `yaml:"api_key_env"` // openai_compat: env var holding the key
@@ -241,7 +242,7 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Sprintf("default_provider %q does not name a known provider", c.DefaultProvider))
 		} else {
 			def := c.Providers[c.DefaultProvider]
-			if def.Type == "openai_compat" && def.APIKeyEnv != "" && os.Getenv(def.APIKeyEnv) == "" {
+			if (def.Type == "openai_compat" || def.Type == "anthropic") && def.APIKeyEnv != "" && os.Getenv(def.APIKeyEnv) == "" {
 				errs = append(errs, fmt.Sprintf("default provider %q requires env var %s to be set", c.DefaultProvider, def.APIKeyEnv))
 			}
 			if def.Type == "openai_compat" && def.BaseURL == "" {

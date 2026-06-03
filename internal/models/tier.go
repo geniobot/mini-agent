@@ -13,7 +13,7 @@ func DetectTier(modelName string) string {
 	}
 
 	// Standard tier: strong, proven models
-	if contains(lower, "claude-3", "gemini-2", "mistral-large", "llama-3.1-70b") {
+	if contains(lower, "claude-3", "gemini-2", "mistral-large", "llama-3.1-70b", "phi3") {
 		return "standard"
 	}
 

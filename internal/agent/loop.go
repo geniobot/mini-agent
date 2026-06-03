@@ -58,6 +58,12 @@ func buildClient(p config.ProviderConfig) llm.Client {
 	switch p.Type {
 	case "openai_compat":
 		return llm.NewOpenAI(p.BaseURL, os.Getenv(p.APIKeyEnv), p.Model)
+	case "anthropic":
+		baseURL := p.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.anthropic.com/v1"
+		}
+		return llm.NewOpenAI(baseURL, os.Getenv(p.APIKeyEnv), p.Model)
 	default: // "ollama"
 		return llm.NewOllama(p.Host)
 	}
@@ -107,7 +113,7 @@ func New(cfg *config.Config) *Loop {
 	}
 
 	ctx := numCtx(defProvider.Options)
-	if ctx == 0 && defProvider.Type == "openai_compat" {
+	if ctx == 0 && (defProvider.Type == "openai_compat" || defProvider.Type == "anthropic") {
 		ctx = 8192 // sensible default for cloud providers that don't use num_ctx
 	}
 	return &Loop{
