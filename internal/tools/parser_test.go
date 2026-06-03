@@ -58,7 +58,7 @@ func TestParseToolCallStrictJSON(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name:      "empty arguments map should fail",
+			name:      "empty arguments map parses but has no useful args",
 			input:     `{"name":"write_file","arguments":{}}`,
 			modelTier: "standard",
 			expected:  nil,

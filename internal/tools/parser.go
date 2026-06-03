@@ -72,7 +72,7 @@ func extractFromProse(text string) (*ToolCall, error) {
 	// Very simple heuristic: if text mentions write_file + a path, try to extract it
 	if strings.Contains(lower, "write_file") || strings.Contains(lower, "write to") {
 		// Try to find a filename pattern (word.extension)
-		filenameRe := regexp.MustCompile(`(?i)(?:write\s+to\s+)?([a-zA-Z0-9_\-./]+\.[a-zA-Z0-9]+)`)
+		filenameRe := regexp.MustCompile(`(?i)(?:write\s+to\s+)?([a-zA-Z0-9_\-]{2,}\.[a-zA-Z]{2,5})`)
 		matches := filenameRe.FindStringSubmatch(text)
 		if len(matches) > 1 {
 			path := matches[1]
