@@ -51,7 +51,7 @@ var logoAgent = [6]string{
 }
 
 // Version is the current release — used in the banner and --version flag.
-const Version = "v2.8.0"
+const Version = "v2.9.0"
 
 func printBanner(cfg *config.Config, modelTier string) {
 	const version = Version
