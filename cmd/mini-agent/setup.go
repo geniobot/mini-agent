@@ -20,6 +20,7 @@ var presets = []providerPreset{
 	{"Groq      (free, fast — llama-3.3-70b)", "openai_compat", "https://api.groq.com/openai/v1", "GROQ_API_KEY", "llama-3.3-70b-versatile"},
 	{"OpenAI    (gpt-4o-mini, paid)", "openai_compat", "https://api.openai.com/v1", "OPENAI_API_KEY", "gpt-4o-mini"},
 	{"OpenRouter (many models, paid)", "openai_compat", "https://openrouter.ai/api/v1", "OPENROUTER_API_KEY", "anthropic/claude-3-5-haiku"},
+	{"Claude API (Anthropic, paid)", "anthropic", "https://api.anthropic.com/v1", "ANTHROPIC_API_KEY", "claude-3-5-sonnet-20241022"},
 	{"Ollama    (local)", "ollama", "http://localhost:11434", "", "qwen2.5-coder:7b"},
 	{"Custom    (any OpenAI-compatible endpoint)", "openai_compat", "", "", ""},
 }
@@ -80,14 +81,23 @@ func runSetup(configPath string) {
 
 	// API key (cloud only)
 	apiKey := ""
-	if preset.provType == "openai_compat" && preset.apiKeyEnv != "" {
+	if (preset.provType == "openai_compat" || preset.provType == "anthropic") && preset.apiKeyEnv != "" {
 		// Check if already set
 		if existing := os.Getenv(preset.apiKeyEnv); existing != "" {
 			fmt.Printf("  %s is already set in env — keeping it\n", preset.apiKeyEnv)
 		} else {
+			if preset.provType == "anthropic" {
+				fmt.Println("  Get your API key at: https://console.anthropic.com/")
+				fmt.Println("  Key format: sk-ant-...")
+			}
 			fmt.Printf("  API key (%s): ", preset.apiKeyEnv)
 			sc.Scan()
 			apiKey = strings.TrimSpace(sc.Text())
+			if preset.provType == "anthropic" && apiKey == "" {
+				fmt.Fprintln(os.Stderr, "  error: ANTHROPIC_API_KEY is required for the Claude API")
+				fmt.Fprintln(os.Stderr, "  export ANTHROPIC_API_KEY=sk-ant-... and re-run --setup")
+				os.Exit(1)
+			}
 		}
 	}
 
@@ -113,7 +123,7 @@ func runSetup(configPath string) {
 	fmt.Fprintf(&sb, "providers:\n")
 	fmt.Fprintf(&sb, "  main:\n")
 	fmt.Fprintf(&sb, "    type: %s\n", preset.provType)
-	if preset.provType == "openai_compat" {
+	if preset.provType == "openai_compat" || preset.provType == "anthropic" {
 		fmt.Fprintf(&sb, "    base_url: %q\n", preset.baseURL)
 		if preset.apiKeyEnv != "" {
 			fmt.Fprintf(&sb, "    api_key_env: %q\n", preset.apiKeyEnv)
