@@ -38,12 +38,15 @@ type OllamaConfig struct {
 }
 
 type AgentConfig struct {
-	MaxHistory         int    `yaml:"max_history"`
-	SystemPrompt       string `yaml:"system_prompt"`
-	StepTimeoutSeconds int    `yaml:"step_timeout_seconds"`
-	MaxGoalSteps       int    `yaml:"max_goal_steps"`       // max steps for /run (quick mode)
-	GoalMaxSteps       int    `yaml:"goal_max_steps"`       // max steps for /goal (persistent mode); 0 = unlimited
-	SummarizeOnCompact bool   `yaml:"summarize_on_compact"`
+	MaxHistory           int    `yaml:"max_history"`
+	SystemPrompt         string `yaml:"system_prompt"`
+	SystemPromptWeak     string `yaml:"system_prompt_weak"`
+	SystemPromptFrontier string `yaml:"system_prompt_frontier"`
+	StepTimeoutSeconds   int    `yaml:"step_timeout_seconds"`
+	MaxGoalSteps         int    `yaml:"max_goal_steps"`       // max steps for /run (quick mode)
+	GoalMaxSteps         int    `yaml:"goal_max_steps"`       // max steps for /goal (persistent mode); 0 = unlimited
+	SummarizeOnCompact   bool   `yaml:"summarize_on_compact"`
+	EnableFallbackParser bool   `yaml:"enable_fallback_parser"`
 }
 
 type ToolsConfig struct {
