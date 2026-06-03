@@ -53,7 +53,7 @@ var logoAgent = [6]string{
 // Version is the current release — used in the banner and --version flag.
 const Version = "v2.8.0"
 
-func printBanner(cfg *config.Config) {
+func printBanner(cfg *config.Config, modelTier string) {
 	const version = Version
 	const sep = "──────────────────────────────────────────────────"
 
@@ -87,7 +87,7 @@ func printBanner(cfg *config.Config) {
 		model = cfg.Ollama.Model
 		host = strings.TrimPrefix(cfg.Ollama.Host, "http://")
 	}
-	fmt.Printf("  %s◆%s  model   %s\n", ansiTeal, ansiReset, model)
+	fmt.Printf("  %s◆%s  model   %s %s[tier: %s]%s\n", ansiTeal, ansiReset, model, ansiDim, modelTier, ansiReset)
 	fmt.Printf("  %s◆%s  host    %s\n", ansiTeal, ansiReset, host)
 	fmt.Printf("  %s◆%s  tools   %s\n", ansiTeal, ansiReset, describeTools(cfg))
 

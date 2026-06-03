@@ -19,6 +19,7 @@ import (
 
 	"mini-agent/internal/config"
 	"mini-agent/internal/llm"
+	"mini-agent/internal/models"
 	"mini-agent/internal/runlog"
 	"mini-agent/internal/session"
 	"mini-agent/internal/tools"
@@ -44,6 +45,7 @@ type Loop struct {
 	lastInput        string      // last LLM-dispatched input; used by /retry
 	lastTurnStart    int         // session.Len() before the last LLM turn; used by /retry
 	lastResponse     string      // last assistant text response; used by /copy
+	ModelTier        string      // "weak" | "standard" | "frontier" — detected from active model at startup
 }
 
 // goalRecord captures the outcome of the most recently completed/stopped goal.
@@ -89,6 +91,26 @@ func New(cfg *config.Config) *Loop {
 		fbClient = buildClient(fbProvider)
 	}
 
+	// Detect model tier and select system prompt accordingly.
+	modelTier := models.DetectTier(defProvider.Model)
+	var systemPrompt string
+	switch modelTier {
+	case "weak":
+		if cfg.Agent.SystemPromptWeak != "" {
+			systemPrompt = cfg.Agent.SystemPromptWeak
+		} else {
+			systemPrompt = cfg.Agent.SystemPrompt
+		}
+	case "frontier":
+		if cfg.Agent.SystemPromptFrontier != "" {
+			systemPrompt = cfg.Agent.SystemPromptFrontier
+		} else {
+			systemPrompt = cfg.Agent.SystemPrompt
+		}
+	default: // "standard"
+		systemPrompt = cfg.Agent.SystemPrompt
+	}
+
 	ctx := numCtx(defProvider.Options)
 	if ctx == 0 && defProvider.Type == "openai_compat" {
 		ctx = 8192 // sensible default for cloud providers that don't use num_ctx
@@ -100,9 +122,10 @@ func New(cfg *config.Config) *Loop {
 		fallbackClient:  fbClient,
 		activeProvider:  defProvider,
 		defaultProvider: defProvider,
-		session:         session.New(cfg.Agent.SystemPrompt, cfg.Agent.MaxHistory, ctx),
+		session:         session.New(systemPrompt, cfg.Agent.MaxHistory, ctx),
 		registry:        tools.New(cfg.Tools),
 		maxCtx:          ctx,
+		ModelTier:       modelTier,
 	}
 }
 
@@ -134,7 +157,7 @@ func (l *Loop) RunGoal(goal string) error {
 
 func (l *Loop) Run() error {
 	if !l.quiet {
-		printBanner(l.cfg)
+		printBanner(l.cfg, l.ModelTier)
 		l.pingOllama(true) //nolint:errcheck — error printed inside; we continue to REPL
 		if l.contextFile != "" {
 			fmt.Printf("  %s◆%s  context  %s\n\n", ansiTeal, ansiReset, l.contextFile)
