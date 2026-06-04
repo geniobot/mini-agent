@@ -45,7 +45,7 @@ func saveMemory(path string, m map[string]string) error {
 	if err != nil {
 		return err
 	}
-	return fileutil.WriteAtomic(path, b, 0o644)
+	return fileutil.WriteAtomic(path, b, 0o600)
 }
 
 // RunMemory executes a memory operation: set, get, delete, or list.
