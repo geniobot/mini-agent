@@ -38,12 +38,15 @@ type OllamaConfig struct {
 }
 
 type AgentConfig struct {
-	MaxHistory         int    `yaml:"max_history"`
-	SystemPrompt       string `yaml:"system_prompt"`
-	StepTimeoutSeconds int    `yaml:"step_timeout_seconds"`
-	MaxGoalSteps       int    `yaml:"max_goal_steps"`       // max steps for /run (quick mode)
-	GoalMaxSteps       int    `yaml:"goal_max_steps"`       // max steps for /goal (persistent mode); 0 = unlimited
-	SummarizeOnCompact bool   `yaml:"summarize_on_compact"`
+	MaxHistory           int    `yaml:"max_history"`
+	SystemPrompt         string `yaml:"system_prompt"`
+	SystemPromptWeak     string `yaml:"system_prompt_weak"`
+	SystemPromptFrontier string `yaml:"system_prompt_frontier"`
+	StepTimeoutSeconds   int    `yaml:"step_timeout_seconds"`
+	MaxGoalSteps         int    `yaml:"max_goal_steps"`       // max steps for /run (quick mode)
+	GoalMaxSteps         int    `yaml:"goal_max_steps"`       // max steps for /goal (persistent mode); 0 = unlimited
+	SummarizeOnCompact   bool   `yaml:"summarize_on_compact"`
+	EnableFallbackParser bool   `yaml:"enable_fallback_parser"`
 }
 
 type ToolsConfig struct {
@@ -78,8 +81,9 @@ type TelegramConfig struct {
 // ProviderConfig describes a single LLM backend.
 // type "ollama"        — local Ollama instance (host + ollama streaming)
 // type "openai_compat" — any OpenAI-compatible /v1/chat/completions endpoint
+// type "anthropic"     — Anthropic Claude API (OpenAI-compatible; routed to openai_compat handler)
 type ProviderConfig struct {
-	Type      string         `yaml:"type"`        // "ollama" | "openai_compat"
+	Type      string         `yaml:"type"`        // "ollama" | "openai_compat" | "anthropic"
 	Host      string         `yaml:"host"`        // ollama: base URL
 	BaseURL   string         `yaml:"base_url"`    // openai_compat: base URL
 	APIKeyEnv string         `yaml:"api_key_env"` // openai_compat: env var holding the key
@@ -127,6 +131,21 @@ agent:
   step_timeout_seconds: 300
   system_prompt: |
     You are a helpful local assistant. Be concise and direct.
+    For file operations output ONLY a JSON object — no explanation, no markdown.
+    {"name":"write_file","arguments":{"path":"hello.py","content":"..."}}
+    For questions, reply in plain text.
+
+  # Optional: simpler prompt for weak models (1.5B)
+  # system_prompt_weak: |
+  #   You are a local assistant. Keep responses short.
+  #   Output ONLY: {"name":"write_file","arguments":{"path":"hello.py","content":"..."}}
+
+  # Optional: advanced prompt for frontier models (Claude 3.5, GPT-4)
+  # system_prompt_frontier: |
+  #   You are an expert assistant with advanced reasoning.
+  #   Use your full capabilities for complex problems.
+
+  enable_fallback_parser: true
 
 tools:
   enabled: true
@@ -223,7 +242,7 @@ func (c *Config) Validate() error {
 			errs = append(errs, fmt.Sprintf("default_provider %q does not name a known provider", c.DefaultProvider))
 		} else {
 			def := c.Providers[c.DefaultProvider]
-			if def.Type == "openai_compat" && def.APIKeyEnv != "" && os.Getenv(def.APIKeyEnv) == "" {
+			if (def.Type == "openai_compat" || def.Type == "anthropic") && def.APIKeyEnv != "" && os.Getenv(def.APIKeyEnv) == "" {
 				errs = append(errs, fmt.Sprintf("default provider %q requires env var %s to be set", c.DefaultProvider, def.APIKeyEnv))
 			}
 			if def.Type == "openai_compat" && def.BaseURL == "" {

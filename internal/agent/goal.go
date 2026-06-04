@@ -129,7 +129,12 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 		// Try native tool calls first, then fall back to JSON extraction.
 		if len(resp.ToolCalls) == 0 && l.registry.Enabled() {
-			if tc := parseFallbackToolCall(resp.Content); len(tc) > 0 {
+			if tc, usedFallback := parseFallbackToolCall(resp.Content, l.ModelTier); len(tc) > 0 {
+				if usedFallback {
+					l.printf("[fallback tool parse — weak-model output required recovery]\n")
+				} else {
+					l.printf("[fallback tool parse]\n")
+				}
 				resp.ToolCalls = tc
 			}
 		}

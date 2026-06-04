@@ -19,6 +19,7 @@ import (
 
 	"mini-agent/internal/config"
 	"mini-agent/internal/llm"
+	"mini-agent/internal/models"
 	"mini-agent/internal/runlog"
 	"mini-agent/internal/session"
 	"mini-agent/internal/tools"
@@ -45,6 +46,7 @@ type Loop struct {
 	lastInput        string      // last LLM-dispatched input; used by /retry
 	lastTurnStart    int         // session.Len() before the last LLM turn; used by /retry
 	lastResponse     string      // last assistant text response; used by /copy
+	ModelTier        string      // "weak" | "standard" | "frontier" — detected from active model at startup
 }
 
 // goalRecord captures the outcome of the most recently completed/stopped goal.
@@ -53,15 +55,16 @@ type goalRecord struct {
 	detail string // summary sentence
 }
 
-type fallbackToolRequest struct {
-	Name      string          `json:"name"`
-	Arguments json.RawMessage `json:"arguments"`
-}
-
 func buildClient(p config.ProviderConfig) llm.Client {
 	switch p.Type {
 	case "openai_compat":
 		return llm.NewOpenAI(p.BaseURL, os.Getenv(p.APIKeyEnv), p.Model)
+	case "anthropic":
+		baseURL := p.BaseURL
+		if baseURL == "" {
+			baseURL = "https://api.anthropic.com/v1"
+		}
+		return llm.NewOpenAI(baseURL, os.Getenv(p.APIKeyEnv), p.Model)
 	default: // "ollama"
 		return llm.NewOllama(p.Host)
 	}
@@ -90,8 +93,28 @@ func New(cfg *config.Config) *Loop {
 		fbClient = buildClient(fbProvider)
 	}
 
+	// Detect model tier and select system prompt accordingly.
+	modelTier := models.DetectTier(defProvider.Model)
+	var systemPrompt string
+	switch modelTier {
+	case "weak":
+		if cfg.Agent.SystemPromptWeak != "" {
+			systemPrompt = cfg.Agent.SystemPromptWeak
+		} else {
+			systemPrompt = cfg.Agent.SystemPrompt
+		}
+	case "frontier":
+		if cfg.Agent.SystemPromptFrontier != "" {
+			systemPrompt = cfg.Agent.SystemPromptFrontier
+		} else {
+			systemPrompt = cfg.Agent.SystemPrompt
+		}
+	default: // "standard"
+		systemPrompt = cfg.Agent.SystemPrompt
+	}
+
 	ctx := numCtx(defProvider.Options)
-	if ctx == 0 && defProvider.Type == "openai_compat" {
+	if ctx == 0 && (defProvider.Type == "openai_compat" || defProvider.Type == "anthropic") {
 		ctx = 8192 // sensible default for cloud providers that don't use num_ctx
 	}
 	return &Loop{
@@ -101,9 +124,10 @@ func New(cfg *config.Config) *Loop {
 		fallbackClient:  fbClient,
 		activeProvider:  defProvider,
 		defaultProvider: defProvider,
-		session:         session.New(cfg.Agent.SystemPrompt, cfg.Agent.MaxHistory, ctx),
+		session:         session.New(systemPrompt, cfg.Agent.MaxHistory, ctx),
 		registry:        tools.New(cfg.Tools),
 		maxCtx:          ctx,
+		ModelTier:       modelTier,
 	}
 }
 
@@ -111,6 +135,21 @@ func (l *Loop) SetSavePath(p string)        { l.savePath = p }
 func (l *Loop) SetQuiet(q bool)             { l.quiet = q }
 func (l *Loop) SetDebug(d bool)             { l.debug = d }
 func (l *Loop) SetLogger(lg *runlog.Logger) { l.logger = lg }
+
+// tierSystemPrompt returns the system prompt appropriate for the model's tier.
+func (l *Loop) tierSystemPrompt() string {
+	switch l.ModelTier {
+	case "weak":
+		if l.cfg.Agent.SystemPromptWeak != "" {
+			return l.cfg.Agent.SystemPromptWeak
+		}
+	case "frontier":
+		if l.cfg.Agent.SystemPromptFrontier != "" {
+			return l.cfg.Agent.SystemPromptFrontier
+		}
+	}
+	return l.cfg.Agent.SystemPrompt
+}
 
 // LoadSession restores messages from path into the current session.
 func (l *Loop) LoadSession(path string) (int, error) {
@@ -136,7 +175,7 @@ func (l *Loop) RunGoal(goal string) error {
 
 func (l *Loop) Run() error {
 	if !l.quiet {
-		printBanner(l.cfg)
+		printBanner(l.cfg, l.ModelTier)
 		l.pingOllama(true) //nolint:errcheck — error printed inside; we continue to REPL
 		if l.contextFile != "" {
 			fmt.Printf("  %s◆%s  context  %s\n\n", ansiTeal, ansiReset, l.contextFile)
@@ -193,7 +232,7 @@ func (l *Loop) Run() error {
 		case input == "/exit" || input == "/quit" || input == "/bye":
 			return nil
 		case input == "/clear":
-			l.session = session.New(l.cfg.Agent.SystemPrompt, l.cfg.Agent.MaxHistory, l.maxCtx)
+			l.session = session.New(l.tierSystemPrompt(), l.cfg.Agent.MaxHistory, l.maxCtx)
 			l.printf("%s[session cleared]%s\n", ansiDim, ansiReset)
 			continue
 		case input == "/forget" || strings.HasPrefix(input, "/forget "):
@@ -526,8 +565,12 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 		return err
 	}
 	if len(assistant.ToolCalls) == 0 && l.registry.Enabled() {
-		if tc := parseFallbackToolCall(assistant.Content); len(tc) > 0 {
-			l.printf("[fallback tool parse]\n")
+		if tc, usedFallback := parseFallbackToolCall(assistant.Content, l.ModelTier); len(tc) > 0 {
+			if usedFallback {
+				l.printf("[fallback tool parse — weak-model output required recovery]\n")
+			} else {
+				l.printf("[fallback tool parse]\n")
+			}
 			assistant.ToolCalls = tc
 			if l.cfg.Tools.UseNativeTools {
 				assistant.Content = ""
@@ -845,61 +888,44 @@ func (l *Loop) chatOnceWith(ctx context.Context, msgs []session.Message) (sessio
 	return assistant, err
 }
 
-func parseFallbackToolCall(content string) []session.ToolCall {
-	clean := strings.TrimSpace(content)
-	if clean == "" {
-		return nil
+// parseFallbackToolCall extracts a tool call from raw LLM text output.
+// It delegates to tools.ParseToolCall so that weak-model fallback logic
+// (regex extraction, prose hinting) is applied automatically when needed.
+// modelTier is forwarded so the parser can enable the right recovery path.
+// The second return value is true when the output was not bare JSON (i.e. the
+// model needed some form of recovery — fence stripping, regex, or prose hints).
+func parseFallbackToolCall(content string, modelTier string) ([]session.ToolCall, bool) {
+	clean := stripCodeFence(content)
+	tc, err := tools.ParseToolCall(clean, modelTier)
+	if err != nil {
+		return nil, false
 	}
-	// Strip a leading code fence (```json ... ```) if present.
-	if strings.HasPrefix(clean, "```") {
-		lines := strings.Split(clean, "\n")
-		if len(lines) >= 3 && strings.HasPrefix(lines[0], "```") && strings.TrimSpace(lines[len(lines)-1]) == "```" {
-			clean = strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
-		}
-	}
-	// When the model writes prose before a JSON block (e.g. "I will run ...\n```json\n{...}"),
-	// find the first embedded code fence and extract its contents.
-	if !strings.HasPrefix(clean, "{") {
-		if i := strings.Index(clean, "```"); i >= 0 {
-			rest := clean[i:]
-			lines := strings.Split(rest, "\n")
-			if len(lines) >= 3 {
-				end := -1
-				for j := len(lines) - 1; j > 0; j-- {
-					if strings.TrimSpace(lines[j]) == "```" {
-						end = j
-						break
-					}
-				}
-				if end > 1 {
-					clean = strings.TrimSpace(strings.Join(lines[1:end], "\n"))
-				}
-			}
-		}
-	}
-	if !strings.HasPrefix(clean, "{") {
-		return nil
-	}
-	end := strings.LastIndex(clean, "}")
-	if end < 0 {
-		return nil
-	}
-	candidate := strings.TrimSpace(clean[:end+1])
-	var req fallbackToolRequest
-	if err := json.Unmarshal([]byte(candidate), &req); err != nil {
-		return nil
-	}
-	if req.Name == "" || len(req.Arguments) == 0 {
-		return nil
-	}
-	switch req.Name {
-	case "read_file", "write_file", "edit_file", "append_file", "list_dir", "run_command", "web_fetch", "search_files", "git":
-		var argsMap map[string]any
-		_ = json.Unmarshal(req.Arguments, &argsMap)
-		return []session.ToolCall{{Function: session.ToolFunction{Name: req.Name, Arguments: argsMap}}}
+	// Validate that the tool name is one the registry knows about.
+	switch tc.Name {
+	case "read_file", "write_file", "edit_file", "append_file", "list_dir",
+		"run_command", "web_fetch", "search_files", "git", "json_query":
+		// good
 	default:
-		return nil
+		return nil, false
 	}
+	result := []session.ToolCall{{Function: session.ToolFunction{Name: tc.Name, Arguments: tc.Arguments}}}
+	// Report whether the fallback (non-strict) parser was needed.
+	usedFallback := !strings.HasPrefix(strings.TrimSpace(clean), "{")
+	return result, usedFallback
+}
+
+// stripCodeFence removes a surrounding ```...``` or ```json...``` fence if present.
+// This handles the common case where a model wraps its JSON in a code block.
+func stripCodeFence(content string) string {
+	clean := strings.TrimSpace(content)
+	if !strings.HasPrefix(clean, "```") {
+		return clean
+	}
+	lines := strings.Split(clean, "\n")
+	if len(lines) >= 3 && strings.TrimSpace(lines[len(lines)-1]) == "```" {
+		return strings.TrimSpace(strings.Join(lines[1:len(lines)-1], "\n"))
+	}
+	return clean
 }
 
 func confirm(prompt string) bool {
@@ -970,11 +996,10 @@ func isRateLimit(err error) bool {
 func parseRetryAfter(msg string) time.Duration {
 	const fallback = 5 * time.Second
 	// Look for "try again in <number>s" or "try again in <number>.<frac>s"
-	idx := strings.Index(msg, "try again in ")
-	if idx < 0 {
+	_, rest, found := strings.Cut(msg, "try again in ")
+	if !found {
 		return fallback
 	}
-	rest := msg[idx+len("try again in "):]
 	var secs float64
 	if _, err := fmt.Sscanf(rest, "%f", &secs); err != nil || secs <= 0 {
 		return fallback

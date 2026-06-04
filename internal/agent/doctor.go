@@ -77,6 +77,16 @@ func RunDoctor(cfg *config.Config) {
 				} else {
 					fmt.Printf("  %s✓%s  %-12s api key set (%s) — model: %s\n", ansiGreen, ansiReset, name, p.APIKeyEnv, p.Model)
 				}
+			case "anthropic":
+				apiKey := os.Getenv(p.APIKeyEnv)
+				if apiKey == "" {
+					fmt.Printf("  %s✗%s  %-12s env var %s is not set\n", ansiRed, ansiReset, name, p.APIKeyEnv)
+					if name == cfg.DefaultProvider {
+						ok = false
+					}
+				} else {
+					fmt.Printf("  %s✓%s  %-12s api key set (%s) — model: %s\n", ansiGreen, ansiReset, name, p.APIKeyEnv, p.Model)
+				}
 			}
 		}
 	}

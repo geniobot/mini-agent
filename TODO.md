@@ -2,7 +2,7 @@
 
 > Prioritized task list. Work top-to-bottom within each tier.
 > Reference: PLAN.md for full context and architecture decisions.
-> Last updated: 2026-06-02
+> Last updated: 2026-06-04
 
 ---
 
@@ -45,6 +45,15 @@
 - [x] `(compacted)` notice only fires when token count actually drops
 - [x] Auto-retry on 429 rate limit (parse delay from error, wait, retry ×3)
 - [x] Fallback parser handles prose-prefixed JSON blocks
+
+### Phase 9 — Multi-provider & Claude API support
+- [x] 9.1 Model tier detection (weak/standard/frontier patterns)
+- [x] 9.2 Tier-aware system prompts (system_prompt_weak, system_prompt_frontier)
+- [x] 9.3 Tool parsing fallback for weak models (graceful JSON recovery)
+- [x] 9.4 Claude API support (type: anthropic, API key via env var)
+- [x] 9.5 Provider wizard update (--setup supports Claude)
+- [x] 9.6 Doctor validation for anthropic providers
+- [x] 9.7 Documentation and README updates
 
 ---
 

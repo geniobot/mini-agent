@@ -137,7 +137,7 @@ func TestParseFallbackToolCall(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := parseFallbackToolCall(tt.input)
+			got, _ := parseFallbackToolCall(tt.input, "standard")
 			if len(got) != tt.wantLen {
 				t.Errorf("len = %d, want %d", len(got), tt.wantLen)
 				return
