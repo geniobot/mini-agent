@@ -151,6 +151,13 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			Parameters:  schema(map[string]string{"json": "string", "path": "string"}, []string{"json", "path"}),
 		}})
 	}
+	if r.cfg.EnableNotify && NotifyAvailable() {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "notify",
+			Description: "Send a desktop notification to the local machine. Use at the end of a long-running goal to alert the user.",
+			Parameters:  schema(map[string]string{"title": "string", "body": "string"}, []string{"body"}),
+		}})
+	}
 	return specs
 }
 
@@ -232,6 +239,8 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 			return "", err
 		}
 		return JsonQuery(a.JSON, a.Path)
+	case "notify":
+		return RunNotify(arguments)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

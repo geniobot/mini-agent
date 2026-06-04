@@ -282,7 +282,11 @@ func (l *Loop) Run() error {
 			name := strings.TrimSpace(strings.TrimPrefix(input, "/model "))
 			l.activeProvider.Model = name
 			l.defaultProvider.Model = name
-			l.printf("%s[model → %s]%s\n", ansiTeal, name, ansiReset)
+			l.ModelTier = models.DetectTier(name)
+			if len(l.session.Messages) > 0 && l.session.Messages[0].Role == "system" {
+				l.session.Messages[0].Content = l.tierSystemPrompt()
+			}
+			l.printf("%s[model → %s (tier: %s)]%s\n", ansiTeal, name, l.ModelTier, ansiReset)
 			continue
 		case strings.HasPrefix(input, "/load "):
 			path := strings.TrimSpace(strings.TrimPrefix(input, "/load "))
@@ -903,7 +907,7 @@ func parseFallbackToolCall(content string, modelTier string) ([]session.ToolCall
 	// Validate that the tool name is one the registry knows about.
 	switch tc.Name {
 	case "read_file", "write_file", "edit_file", "append_file", "list_dir",
-		"run_command", "web_fetch", "search_files", "git", "json_query":
+		"run_command", "web_fetch", "search_files", "git", "json_query", "notify":
 		// good
 	default:
 		return nil, false

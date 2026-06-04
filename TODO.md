@@ -65,7 +65,37 @@
 
 ---
 
-## 🔲 Open — Tier 1 (quick wins, do first)
+## 🔲 Open — Phase 10 (robustness & quality-of-life)
+
+### 10.1 Tool error retry
+- [ ] Classify tool errors as retryable vs fatal in goal/run loops
+- [ ] On retryable failure, inject corrective system message and allow one extra step
+- [ ] Files: `internal/agent/goalcmd.go`, `internal/agent/loop.go`
+
+### 10.2 `notify` tool
+- [x] `notify-send` (Linux) / `osascript` (macOS) shell-out; silently no-ops if binary absent
+- [x] Config key `enable_notify: true`
+- [x] Binary presence checked at startup like `git`
+- [x] Unit tests (4 cases, all passing)
+- [x] Files: `internal/tools/notify.go`
+
+### 10.3 `/model <name>` command
+- [x] Switch model mid-session without restarting
+- [x] Re-detects tier and updates system prompt on switch
+- [x] Prints confirmation with new tier detection result
+- [x] Files: `internal/agent/loop.go`
+
+### 10.4 `memory` tool
+- [ ] Persistent key-value store at `~/.mini-agent/memory.json`
+- [ ] Operations: `set`, `get`, `delete`, `list`
+- [ ] Atomic writes via `fileutil.WriteAtomic`
+- [ ] Config key `enable_memory: true`
+- [ ] Unit tests
+- [ ] Files: new `internal/tools/memory.go`
+
+---
+
+## ✅ Previously Open — Tier 1 (quick wins, do first)
 
 ### Bugs
 - [x] Remove stale test files from repo root (`hello.txt`, `hello_world.txt`, `hi.txt`, `howareyou.txt`) — deleted

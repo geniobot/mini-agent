@@ -444,7 +444,7 @@ func countToolCalls(notes string) int {
 	tools := []string{
 		"[write_file]", "[read_file]", "[edit_file]", "[append_file]",
 		"[list_dir]", "[run_command]", "[web_fetch]", "[search_files]",
-		"[git]", "[json_query]",
+		"[git]", "[json_query]", "[notify]",
 	}
 	count := 0
 	for _, line := range strings.Split(notes, "\n") {

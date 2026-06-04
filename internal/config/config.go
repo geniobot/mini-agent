@@ -62,6 +62,7 @@ type ToolsConfig struct {
 	EnableSearchFiles    bool     `yaml:"enable_search_files"`
 	EnableGit            bool     `yaml:"enable_git"`
 	EnableJsonQuery      bool     `yaml:"enable_json_query"`
+	EnableNotify         bool     `yaml:"enable_notify"`
 	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
 	ConfirmGitWrite      bool     `yaml:"confirm_git_write"`
 	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`
