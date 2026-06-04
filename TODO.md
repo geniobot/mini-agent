@@ -46,6 +46,14 @@
 - [x] Auto-retry on 429 rate limit (parse delay from error, wait, retry ×3)
 - [x] Fallback parser handles prose-prefixed JSON blocks
 
+### v2.9.1 — Reliability & UX polish
+- [x] Atomic writes for all state/config files (goal state, goal history, session, config.yaml, ~/.zshrc) — prevents corruption on crash
+- [x] `--debug` flag: prints raw LLM request/response JSON to stderr
+- [x] `--log [N]`: prints last N entries from run.log and exits
+- [x] `/inspect` command: per-message token breakdown + full system prompt
+- [x] `/compact` command: manual context compaction keeping last 4 messages
+- [x] CWD + git branch shown in prompt (`~/dir(branch) [tok] >`)
+
 ### Phase 9 — Multi-provider & Claude API support
 - [x] 9.1 Model tier detection (weak/standard/frontier patterns)
 - [x] 9.2 Tier-aware system prompts (system_prompt_weak, system_prompt_frontier)
