@@ -907,7 +907,7 @@ func parseFallbackToolCall(content string, modelTier string) ([]session.ToolCall
 	// Validate that the tool name is one the registry knows about.
 	switch tc.Name {
 	case "read_file", "write_file", "edit_file", "append_file", "list_dir",
-		"run_command", "web_fetch", "search_files", "git", "json_query", "notify":
+		"run_command", "web_fetch", "search_files", "git", "json_query", "notify", "memory":
 		// good
 	default:
 		return nil, false

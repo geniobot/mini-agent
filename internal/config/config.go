@@ -63,6 +63,7 @@ type ToolsConfig struct {
 	EnableGit            bool     `yaml:"enable_git"`
 	EnableJsonQuery      bool     `yaml:"enable_json_query"`
 	EnableNotify         bool     `yaml:"enable_notify"`
+	EnableMemory         bool     `yaml:"enable_memory"`
 	ConfirmRunCmd        bool     `yaml:"confirm_run_command"`
 	ConfirmGitWrite      bool     `yaml:"confirm_git_write"`
 	ConfirmWriteFile     bool     `yaml:"confirm_write_file"`

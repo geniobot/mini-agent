@@ -68,9 +68,11 @@
 ## 🔲 Open — Phase 10 (robustness & quality-of-life)
 
 ### 10.1 Tool error retry
-- [ ] Classify tool errors as retryable vs fatal in goal/run loops
-- [ ] On retryable failure, inject corrective system message and allow one extra step
-- [ ] Files: `internal/agent/goalcmd.go`, `internal/agent/loop.go`
+- [x] `isRetryableToolError()` classifies errors by message pattern (not found, permission denied, no match, etc.)
+- [x] Retryable errors tagged `[tool-error]` in goal notes; corrective directive injected into next prompt
+- [x] `lastToolError()` extracts error text for the directive
+- [x] 3 unit tests (classifier, extractor, prompt injection)
+- [x] Files: `internal/agent/goalcmd.go`, `internal/agent/goal_test.go`
 
 ### 10.2 `notify` tool
 - [x] `notify-send` (Linux) / `osascript` (macOS) shell-out; silently no-ops if binary absent
@@ -86,12 +88,12 @@
 - [x] Files: `internal/agent/loop.go`
 
 ### 10.4 `memory` tool
-- [ ] Persistent key-value store at `~/.mini-agent/memory.json`
-- [ ] Operations: `set`, `get`, `delete`, `list`
-- [ ] Atomic writes via `fileutil.WriteAtomic`
-- [ ] Config key `enable_memory: true`
-- [ ] Unit tests
-- [ ] Files: new `internal/tools/memory.go`
+- [x] Persistent key-value store at `~/.mini-agent/memory.json`
+- [x] Operations: `set`, `get`, `delete`, `list` (sorted output)
+- [x] Atomic writes via `fileutil.WriteAtomic`
+- [x] Config key `enable_memory: true`
+- [x] 9 unit tests (set/get, missing key, delete, list, empty, unknown op, invalid JSON, missing key in set, no .tmp file)
+- [x] Files: `internal/tools/memory.go`, `internal/tools/memory_test.go`
 
 ---
 

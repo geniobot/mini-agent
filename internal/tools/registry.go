@@ -158,6 +158,21 @@ func (r *Registry) Specs() []llm.ToolSpec {
 			Parameters:  schema(map[string]string{"title": "string", "body": "string"}, []string{"body"}),
 		}})
 	}
+	if r.cfg.EnableMemory {
+		specs = append(specs, llm.ToolSpec{Type: "function", Function: llm.ToolFunction{
+			Name:        "memory",
+			Description: "Persist facts across sessions. ops: set (store key+value), get (retrieve by key), delete (remove key), list (show all). Use for information that should survive past the current conversation.",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"op":    map[string]any{"type": "string", "enum": []string{"set", "get", "delete", "list"}},
+					"key":   map[string]any{"type": "string"},
+					"value": map[string]any{"type": "string"},
+				},
+				"required": []string{"op"},
+			},
+		}})
+	}
 	return specs
 }
 
@@ -241,6 +256,8 @@ func (r *Registry) Execute(name, arguments string) (string, error) {
 		return JsonQuery(a.JSON, a.Path)
 	case "notify":
 		return RunNotify(arguments)
+	case "memory":
+		return RunMemory(arguments)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", name)
 	}

@@ -72,6 +72,55 @@ func TestCountToolCallsInNotes(t *testing.T) {
 	}
 }
 
+func TestIsRetryableToolError(t *testing.T) {
+	cases := []struct {
+		msg      string
+		expected bool
+	}{
+		{"no such file or directory", true},
+		{"file not found", true},
+		{"pattern not found in file", true},
+		{"unique match required", true},
+		{"permission denied", true},
+		{"is a directory", true},
+		{"file too large", false},
+		{"unknown tool: foo", false},
+		{"binary not available", false},
+	}
+	for _, c := range cases {
+		got := isRetryableToolError(fmt.Errorf("%s", c.msg))
+		if got != c.expected {
+			t.Errorf("isRetryableToolError(%q) = %v, want %v", c.msg, got, c.expected)
+		}
+	}
+	if isRetryableToolError(nil) {
+		t.Error("nil error should not be retryable")
+	}
+}
+
+func TestLastToolError(t *testing.T) {
+	notes := "step 1 [write_file]: wrote a.txt\nstep 2 [tool-error]: tool error: no such file: missing.txt\n"
+	got := lastToolError(notes)
+	if got != "no such file: missing.txt" {
+		t.Errorf("unexpected: %q", got)
+	}
+}
+
+func TestBuildPersistentGoalPrompt_ToolErrorDirective(t *testing.T) {
+	g := &GoalState{
+		Objective: "create hello.py",
+		Steps:     2,
+		Notes:     "step 1 [tool-error]: tool error: no such file: missing.txt\n",
+	}
+	prompt := buildPersistentGoalPrompt(g, 0)
+	if !strings.Contains(prompt, "Do NOT give up") {
+		t.Errorf("expected retry directive in prompt, got: %q", prompt)
+	}
+	if !strings.Contains(prompt, "no such file") {
+		t.Errorf("expected error text in prompt, got: %q", prompt)
+	}
+}
+
 func TestAppendNotes(t *testing.T) {
 	t.Run("empty notes gets entry", func(t *testing.T) {
 		got := appendNotes("", "step 1 [write_file]", "wrote hello.txt")

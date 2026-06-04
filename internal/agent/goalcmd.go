@@ -389,6 +389,14 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 				truncStr(strings.TrimSpace(result), 80))
 		}
 
+		// On retryable tool errors, tag the note so the prompt builder can inject
+		// a corrective directive, helping weak models recover instead of giving up.
+		noteLabel := fmt.Sprintf("step %d [%s]", g.Steps, tc.Function.Name)
+		if execErr != nil && isRetryableToolError(execErr) {
+			noteLabel = fmt.Sprintf("step %d [tool-error]", g.Steps)
+			l.printf("  %s[retryable error — model will be directed to try again]%s\n", ansiDim, ansiReset)
+		}
+
 		// Loop detection: track recent signatures, stop if stuck.
 		sig := tc.Function.Name + "|" + string(argsJSON) + "|" + result
 		g.RecentSigs = appendGoalSig(g.RecentSigs, sig)
@@ -403,8 +411,7 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 			return nil
 		}
 
-		g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [%s]", g.Steps, tc.Function.Name),
-			truncStr(result, goalStepNoteLen))
+		g.Notes = appendGoalNotes(g.Notes, noteLabel, truncStr(result, goalStepNoteLen))
 		g.LastReason = fmt.Sprintf("step %d: %s", g.Steps, tc.Function.Name)
 		g.UpdatedAt = time.Now()
 		saveGoalState(statePath, g)
@@ -425,6 +432,15 @@ func buildPersistentGoalPrompt(g *GoalState, blockedDoneCount int) string {
 			blockedDoneCount,
 		)
 	}
+	// If the last recorded step was a retryable tool error, direct the model to fix it.
+	if strings.Contains(g.Notes, "[tool-error]") {
+		lastErr := lastToolError(g.Notes)
+		return base + fmt.Sprintf(
+			"\n\nThe last tool call failed with error: %s\n"+
+				"Do NOT give up. Adjust the arguments and call the tool again with corrected values. Do not output DONE.",
+			lastErr,
+		)
+	}
 	calls := countToolCalls(g.Notes)
 	var directive string
 	switch {
@@ -438,13 +454,49 @@ func buildPersistentGoalPrompt(g *GoalState, blockedDoneCount int) string {
 	return base + "\n" + directive
 }
 
+// isRetryableToolError returns true for errors the model can likely fix by
+// adjusting its arguments (wrong path, missing match, etc.).
+func isRetryableToolError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	retryable := []string{
+		"no such file", "not found", "does not exist",
+		"no match", "pattern not found", "unique match",
+		"permission denied",
+		"is a directory",
+	}
+	for _, s := range retryable {
+		if strings.Contains(msg, s) {
+			return true
+		}
+	}
+	return false
+}
+
+// lastToolError extracts the error text from the most recent [tool-error] note line.
+func lastToolError(notes string) string {
+	lines := strings.Split(notes, "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.Contains(lines[i], "[tool-error]") {
+			// Format: "step N [tool-error]: tool error: <msg>"
+			if idx := strings.Index(lines[i], ": "); idx >= 0 {
+				return strings.TrimPrefix(lines[i][idx+2:], "tool error: ")
+			}
+			return lines[i]
+		}
+	}
+	return "unknown error"
+}
+
 // countToolCalls returns the number of steps that actually executed a tool
 // (not counting reasoning-only steps or denied steps).
 func countToolCalls(notes string) int {
 	tools := []string{
 		"[write_file]", "[read_file]", "[edit_file]", "[append_file]",
 		"[list_dir]", "[run_command]", "[web_fetch]", "[search_files]",
-		"[git]", "[json_query]", "[notify]",
+		"[git]", "[json_query]", "[notify]", "[memory]",
 	}
 	count := 0
 	for _, line := range strings.Split(notes, "\n") {
