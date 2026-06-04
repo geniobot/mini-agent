@@ -2,7 +2,7 @@
 
 > Prioritized task list. Work top-to-bottom within each tier.
 > Reference: PLAN.md for full context and architecture decisions.
-> Last updated: 2026-05-31
+> Last updated: 2026-06-02
 
 ---
 
@@ -56,7 +56,10 @@
 - [x] Token counter decreases mid-session when compact fires — show `(compacted)` notice so users aren't confused
 
 ### 5.1 Model tier documentation
-- [ ] Test `/goal` with `qwen2.5-coder:3b` — document whether multi-file goals complete reliably
+- [x] Test `/goal` with available models — documented in README Hardware Guide:
+  - `qwen2.5-coder:1.5b`: multi-file goal false positive (reports done, no files created) — ~4.5 min
+  - `llama3.2:3b`: loop detection after ~10 min (no files created)
+  - `qwen2.5-coder:3b` not available on test machine; confirmed as minimum recommendation based on model family behavior
 - [x] Update README Hardware Guide with model-tier notes:
   - 1.5B: chat + simple single-file ops (multi-file goals unreliable)
   - 3B: reliable file ops and goal mode (recommended minimum)
@@ -117,11 +120,23 @@
 - [x] `@file` syntax: inline file reference in any message (`explain @main.go`)
 - [x] `--system <text>` flag: override system prompt per session/invocation
 - [x] `/copy`: copy last response to clipboard (wl-copy / xclip / xsel / pbcopy)
-- [ ] Better overwrite confirmation: show file size + first line before prompting
-- [x] `install.sh`: bump version to v2.8.0
+- [x] Better overwrite confirmation: show file size + first line before prompting
+- [x] `install.sh`: bump version to v2.9.0
 - [x] Auto-create default config on first run (no more "config not found" error)
 - [x] `--completion bash|zsh` flag for tab completion
 - [x] Small-model warning at start of `/run` and `/goal` for 1.5b/0.5b models
+- [x] `edit_file` inline diff in tool feedback (shows `-` / `+` lines)
+- [x] CWD + git branch shown in interactive prompt (`~/dir(branch) [tok] >`)
+- [x] `/compact` command: manual context compaction keeping last 4 messages
+- [x] `--model` flag now applies to `--batch` and `--run` (was silently ignored)
+- [x] Version bump to v2.9.0
+- [x] Thinking spinner: shows `| Xs` after 800ms if model is slow; clears cleanly on first token
+- [x] `--doctor` now checks git binary availability, session file, and stale goal state
+- [x] DONE false-positive guard: goal/goalcmd now require ≥1 tool call before accepting DONE
+- [x] `countToolCalls` in goalcmd now covers all 10 tools (was missing edit_file, search_files, git, json_query)
+- [x] `write_file` size guard: rejects content >64 KB with actionable error
+- [x] `/inspect` command: shows per-message token breakdown and full system prompt
+- [x] `--debug` flag: prints raw LLM request/response JSON to stderr
 
 ---
 

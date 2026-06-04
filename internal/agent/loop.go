@@ -36,6 +36,7 @@ type Loop struct {
 	maxCtx          int
 	savePath        string         // empty = no session persistence
 	quiet           bool           // suppress decoration; only emit clean output
+	debug           bool           // print raw LLM requests/responses to stderr
 	logger          *runlog.Logger // nil = no run log
 	goal             *GoalState  // non-nil while a /goal is active or paused
 	contextFile      string      // set when CONTEXT.md is loaded; printed in startup banner
@@ -106,8 +107,9 @@ func New(cfg *config.Config) *Loop {
 	}
 }
 
-func (l *Loop) SetSavePath(p string)      { l.savePath = p }
-func (l *Loop) SetQuiet(q bool)           { l.quiet = q }
+func (l *Loop) SetSavePath(p string)        { l.savePath = p }
+func (l *Loop) SetQuiet(q bool)             { l.quiet = q }
+func (l *Loop) SetDebug(d bool)             { l.debug = d }
 func (l *Loop) SetLogger(lg *runlog.Logger) { l.logger = lg }
 
 // LoadSession restores messages from path into the current session.
@@ -254,6 +256,12 @@ func (l *Loop) Run() error {
 		case input == "/copy":
 			l.copyLastResponse()
 			continue
+		case input == "/inspect":
+			l.printInspect()
+			continue
+		case input == "/compact":
+			l.manualCompact()
+			continue
 		}
 
 		// LLM operations run under a signal-cancellable context.
@@ -293,6 +301,7 @@ func (l *Loop) printPrompt() {
 			goalPart = fmt.Sprintf("%s[⏸ goal paused]%s ", ansiYellow, ansiReset)
 		}
 	}
+	prefix := promptContext()
 	if l.maxCtx > 0 {
 		tokens := session.EstimateTokens(l.session.Snapshot())
 		compactedNotice := ""
@@ -308,10 +317,39 @@ func (l *Loop) printPrompt() {
 		case pct >= 0.75:
 			color = ansiYellow
 		}
-		fmt.Printf("\n%s%s%s[%d/%d tok]%s > ", compactedNotice, goalPart, color, tokens, l.maxCtx, ansiReset)
+		fmt.Printf("\n%s%s%s%s[%d/%d tok]%s > ", compactedNotice, prefix, goalPart, color, tokens, l.maxCtx, ansiReset)
 	} else {
-		fmt.Printf("\n%s> ", goalPart)
+		fmt.Printf("\n%s%s> ", prefix, goalPart)
 	}
+}
+
+// promptContext returns a short "cwd(branch) " prefix for the input prompt.
+// Falls back gracefully: no CWD on error, no branch if not in a git repo.
+func promptContext() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(cwd, home) {
+		cwd = "~" + cwd[len(home):]
+	}
+	// Keep it readable — show at most 2 path components.
+	if len(cwd) > 30 {
+		sep := string(filepath.Separator)
+		parts := strings.Split(cwd, sep)
+		if len(parts) >= 2 {
+			cwd = "…" + sep + strings.Join(parts[len(parts)-2:], sep)
+		}
+	}
+
+	branch := ""
+	if out, err := exec.Command("git", "branch", "--show-current").Output(); err == nil {
+		if b := strings.TrimSpace(string(out)); b != "" {
+			branch = "(" + b + ")"
+		}
+	}
+
+	return cwd + branch + " "
 }
 
 func (l *Loop) printHelp() {
@@ -332,6 +370,8 @@ func (l *Loop) printHelp() {
 		{"/model [name]", "show or switch the active model"},
 		{"/unload", "evict model from RAM to free memory"},
 		{"/status", "show session and model status"},
+		{"/inspect", "show system prompt, per-message token breakdown, and session structure"},
+		{"/compact", "drop old messages to reduce context (summarizes if summarize_on_compact is on)"},
 		{"/forget [N]", "drop last N messages from history (default 2)"},
 		{"/clear", "reset entire conversation history"},
 		{"/help", "show this message"},
@@ -369,6 +409,52 @@ func (l *Loop) printStatus() {
 		fmt.Printf("  %s◆%s  session   %s\n", ansiTeal, ansiReset, l.savePath)
 	}
 	fmt.Printf("%s%s%s\n\n", ansiDim, sep, ansiReset)
+}
+
+func (l *Loop) printInspect() {
+	const sep = "──────────────────────────────────────────────────"
+	fmt.Printf("\n%s%s%s\n", ansiDim, sep, ansiReset)
+	fmt.Printf("  %s/inspect — session structure%s\n", ansiTeal, ansiReset)
+	fmt.Printf("%s%s%s\n\n", ansiDim, sep, ansiReset)
+
+	msgs := l.session.Snapshot()
+	totalToks := 0
+	for i, m := range msgs {
+		toks := session.EstimateTokens([]session.Message{m})
+		totalToks += toks
+		role := m.Role
+		preview := strings.ReplaceAll(m.Content, "\n", " ")
+		if len(preview) > 100 {
+			preview = preview[:100] + "…"
+		}
+		tag := ""
+		if m.Role == "system" {
+			if strings.Contains(m.Content, "[context summary]") {
+				tag = " (summary)"
+			} else if i == 0 {
+				tag = " (system prompt)"
+			} else {
+				tag = " (injected)"
+			}
+		}
+		fmt.Printf("  %s[%d]%s %-9s %s~%d tok%s  %s%s%s\n",
+			ansiDim, i, ansiReset,
+			role+tag,
+			ansiDim, toks, ansiReset,
+			ansiDim, preview, ansiReset)
+	}
+
+	fmt.Printf("\n  %stotal: %d tokens / %d max (%d messages)%s\n",
+		ansiTeal, totalToks, l.maxCtx, len(msgs), ansiReset)
+
+	// Show full system prompt.
+	if len(msgs) > 0 && msgs[0].Role == "system" {
+		fmt.Printf("\n%s%s%s\n", ansiDim, sep, ansiReset)
+		fmt.Printf("  %ssystem prompt:%s\n\n", ansiTeal, ansiReset)
+		fmt.Printf("%s%s%s\n", ansiDim, msgs[0].Content, ansiReset)
+	}
+
+	fmt.Printf("\n%s%s%s\n\n", ansiDim, sep, ansiReset)
 }
 
 func (l *Loop) unloadModel() {
@@ -485,7 +571,7 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 		if tc.Function.Name == "write_file" && l.registry.ConfirmWriteFile() {
 			if path, ok := tc.Function.Arguments["path"].(string); ok {
 				if _, err := os.Stat(filepath.Clean(path)); err == nil {
-					if !confirm(fmt.Sprintf("Overwrite existing file %q? [y/N]: ", path)) {
+					if !confirmOverwrite(path) {
 						if l.cfg.Tools.UseNativeTools {
 							l.session.AddMessage(session.Message{Role: "tool", Name: tc.Function.Name, Content: "tool error: user denied overwrite"})
 						} else {
@@ -545,6 +631,56 @@ func (l *Loop) handle(ctx context.Context, input string) error {
 	return nil
 }
 
+// manualCompact drops all but the most recent 4 messages and optionally summarizes
+// the dropped messages, same behaviour as automatic compaction.
+func (l *Loop) manualCompact() {
+	msgs := l.session.Snapshot()
+	historyCount := 0
+	for _, m := range msgs {
+		if m.Role != "system" {
+			historyCount++
+		}
+	}
+	keep := 4
+	drop := historyCount - keep
+	if drop <= 0 {
+		l.printf("%s[nothing to compact — only %d message(s) in history]%s\n", ansiDim, historyCount, ansiReset)
+		return
+	}
+
+	// Populate DroppedMessages so maybeInjectSummary can summarize them.
+	snapshot := l.session.Snapshot()
+	start := 0
+	for i, m := range snapshot {
+		if m.Role != "system" {
+			start = i
+			break
+		}
+	}
+	dropped := make([]session.Message, 0, drop)
+	for i, m := range snapshot[start:] {
+		if i >= drop {
+			break
+		}
+		dropped = append(dropped, m)
+	}
+	l.session.DroppedMessages = dropped
+	l.session.DropOldest(drop)
+
+	tokensBefore := session.EstimateTokens(msgs)
+	tokensAfter := session.EstimateTokens(l.session.Snapshot())
+	l.printf("%s[compacted: removed %d messages, ~%d → ~%d tokens]%s\n",
+		ansiDim, drop, tokensBefore, tokensAfter, ansiReset)
+
+	if l.cfg.Agent.SummarizeOnCompact {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		l.maybeInjectSummary(ctx)
+	} else {
+		l.session.DroppedMessages = nil
+	}
+}
+
 // maybeInjectSummary checks whether compaction dropped messages this turn and,
 // if summarize_on_compact is enabled, asks the LLM for a brief summary and
 // injects it as a protected system message so key facts survive future trims.
@@ -601,14 +737,67 @@ func (l *Loop) chatOnceWith(ctx context.Context, msgs []session.Message) (sessio
 	var printedCount int
 	var isToolCall bool
 
-	err := l.client.ChatStream(ctx, llm.ChatRequest{
+	// Spinner: if the model takes >800ms to produce the first token, show a
+	// rotating indicator with elapsed time. Only in ANSI-color mode so plain/pipe
+	// output is never polluted.
+	spinnerStop := make(chan struct{})
+	spinnerDone := make(chan struct{})
+	spinnerWasActive := false // safe to read after <-spinnerDone
+
+	if !l.quiet && ansiReset != "" {
+		go func() {
+			defer close(spinnerDone)
+			select {
+			case <-spinnerStop:
+				return
+			case <-time.After(800 * time.Millisecond):
+			}
+			spinnerWasActive = true
+			frames := [4]string{"|", "/", "-", "\\"}
+			i := 0
+			t0 := time.Now()
+			tick := time.NewTicker(150 * time.Millisecond)
+			defer tick.Stop()
+			for {
+				fmt.Printf("\rassistant> %s %.0fs  ", frames[i%4], time.Since(t0).Seconds())
+				i++
+				select {
+				case <-spinnerStop:
+					return
+				case <-tick.C:
+				}
+			}
+		}()
+	} else {
+		close(spinnerDone)
+	}
+
+	var firstChunkHandled bool
+
+	req := llm.ChatRequest{
 		Model:     l.activeProvider.Model,
 		Messages:  msgs,
 		Stream:    l.activeProvider.Stream,
 		Tools:     reqTools,
 		Options:   l.activeProvider.Options,
 		KeepAlive: l.activeProvider.KeepAlive,
-	}, func(chunk llm.ChatChunk) error {
+	}
+	if l.debug {
+		if b, err := json.Marshal(req); err == nil {
+			fmt.Fprintf(os.Stderr, "\n[debug] request: %s\n", b)
+		}
+	}
+
+	err := l.client.ChatStream(ctx, req, func(chunk llm.ChatChunk) error {
+		if !firstChunkHandled {
+			firstChunkHandled = true
+			close(spinnerStop)
+			<-spinnerDone // wait for goroutine to finish before any terminal writes
+			if spinnerWasActive {
+				fmt.Print("\r\033[2K") // erase the spinner line
+				fmt.Print("assistant> ")
+			}
+		}
 		if chunk.Message.Content != "" {
 			content.WriteString(chunk.Message.Content)
 			str := content.String()
@@ -637,6 +826,19 @@ func (l *Loop) chatOnceWith(ctx context.Context, msgs []session.Message) (sessio
 		assistant.ToolCalls = toolCalls
 		return nil
 	})
+
+	// If ChatStream returned without any chunks (error or empty response),
+	// stop the spinner goroutine so it doesn't leak.
+	if !firstChunkHandled {
+		close(spinnerStop)
+		<-spinnerDone
+	}
+
+	if l.debug {
+		if b, err2 := json.Marshal(assistant); err2 == nil {
+			fmt.Fprintf(os.Stderr, "[debug] response: %s\n", b)
+		}
+	}
 	if !l.quiet {
 		fmt.Println()
 	}
@@ -709,6 +911,38 @@ func confirm(prompt string) bool {
 	}
 	ans := strings.ToLower(strings.TrimSpace(text))
 	return ans == "y" || ans == "yes"
+}
+
+// confirmOverwrite prompts before overwriting a file, showing its size and first line.
+func confirmOverwrite(path string) bool {
+	clean := filepath.Clean(path)
+	info, err := os.Stat(clean)
+	if err != nil {
+		return confirm(fmt.Sprintf("Overwrite existing file %q? [y/N]: ", path))
+	}
+
+	detail := fmt.Sprintf("%d bytes", info.Size())
+
+	if f, err := os.Open(clean); err == nil {
+		buf := make([]byte, 256)
+		n, _ := f.Read(buf)
+		f.Close()
+		if n > 0 {
+			line := string(buf[:n])
+			if idx := strings.IndexByte(line, '\n'); idx >= 0 {
+				line = line[:idx]
+			}
+			line = strings.TrimSpace(line)
+			if line != "" {
+				if len(line) > 72 {
+					line = line[:72] + "…"
+				}
+				detail += fmt.Sprintf(`, first line: %q`, line)
+			}
+		}
+	}
+
+	return confirm(fmt.Sprintf("Overwrite %q (%s)? [y/N]: ", path, detail))
 }
 
 // printf is a quiet-aware print: suppressed when l.quiet is true.

@@ -1,6 +1,7 @@
 package runlog
 
 import (
+	"bufio"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -83,6 +84,36 @@ func (l *Logger) rotateIfNeeded() error {
 	l.f = f
 	l.size = 0
 	return nil
+}
+
+// ReadTail reads the last n entries from the log file at path.
+// Returns all entries if the file has fewer than n lines.
+func ReadTail(path string, n int) ([]Entry, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+
+	var entries []Entry
+	sc := bufio.NewScanner(f)
+	for sc.Scan() {
+		line := sc.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		var e Entry
+		if json.Unmarshal(line, &e) == nil {
+			entries = append(entries, e)
+		}
+	}
+	if err := sc.Err(); err != nil {
+		return nil, err
+	}
+	if n > 0 && len(entries) > n {
+		entries = entries[len(entries)-n:]
+	}
+	return entries, nil
 }
 
 // Close flushes and closes the log file.

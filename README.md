@@ -104,14 +104,16 @@ In multi-step goal execution, each step receives a running `notes` string instea
 - `/goal` — persistent autonomous goal mode: survives restarts, pause/resume, unlimited steps
 - `/run` — quick one-shot goal execution (up to 10 steps)
 - Per-step timeout so slow hardware never hangs indefinitely
+- Thinking spinner — shows elapsed time when a model call takes >800ms, then clears cleanly on first token
 - Loop detection — stops if the same action repeats, with progressively smarter tracking
+- DONE guard — requires at least one tool call before accepting a completion signal (prevents false positives from small models)
 - Working notes across goal steps — each step sees results from all previous steps
 - Context overflow recovery — trims history and retries automatically
 - Context pressure indicator — prompt turns yellow/red as context fills up
 
 **Tools**
 - `read_file` — read text files (max 64 KB; optional offset/limit for line ranges)
-- `write_file` — write or overwrite files (with optional overwrite confirmation)
+- `write_file` — write or overwrite files (confirmation shows existing file size and first line)
 - `edit_file` — find-and-replace edits on existing files (no full rewrite needed)
 - `append_file` — append to files without overwriting
 - `list_dir` — list directory contents with file sizes
@@ -144,7 +146,7 @@ In multi-step goal execution, each step receives a running `notes` string instea
 **Reliability**
 - `--setup` interactive wizard — switch providers (Groq, OpenAI, OpenRouter, Ollama) in seconds
 - Auto-retry on rate limits — parses the provider's suggested delay and waits, up to 3 retries
-- `--doctor` validates config, Ollama connectivity, and model availability
+- `--doctor` validates config, Ollama connectivity, model availability, git binary, session file, and active goal state
 - Config validation on startup — bad values reported clearly before connecting
 - Deterministic JSON fallback parser — handles clean JSON and prose-prefixed JSON blocks
 
@@ -449,6 +451,8 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `/models` | List all models available in the connected Ollama instance |
 | `/unload` | Evict the current model from Ollama's RAM to free memory |
 | `/status` | Show model, host, token usage, history depth, and active config |
+| `/inspect` | Show per-message token breakdown and the full system prompt (useful for debugging) |
+| `/compact` | Drop old messages keeping the last 4, optionally summarize (if `summarize_on_compact: true`) |
 | `/forget [N]` | Drop the last N messages from history (default: 2) |
 | `/clear` | Reset the entire conversation history |
 | `/help` | List all available commands |
@@ -464,7 +468,7 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `--run <goal>` | — | Run a goal non-interactively and exit with code 0 on success |
 | `--batch <file>` | — | Run goals one per line from a file; outputs JSON-lines results to stdout |
 | `--parallel N` | `1` | Number of goals to run concurrently in `--batch` mode |
-| `--model <name>` | from config | Override the model for this session |
+| `--model <name>` | from config | Override the model for this session (also applied to `--batch` and `--run`) |
 | `--system <text>` | from config | Override the system prompt for this session |
 | `--fresh` | `false` | Skip loading saved session history |
 | `--no-save` | `false` | Do not write session history to disk on exit |
@@ -472,6 +476,7 @@ This is much faster than asking the agent to `read_file` it — the file goes st
 | `--quiet` | `false` | Suppress all decoration — only the final answer reaches stdout |
 | `--setup` | — | Interactive wizard: pick a provider, enter API key, update config — then exit |
 | `--doctor` | — | Validate config, check Ollama connectivity, verify model — then exit |
+| `--debug` | — | Print raw LLM request/response JSON to stderr (useful for diagnosing model behaviour) |
 | `--daemon` | — | Run scheduled goals from the `schedule:` config section; exits on SIGTERM |
 | `--telegram` | — | Start Telegram bot mode (requires `TELEGRAM_BOT_TOKEN` env var) |
 | `--no-context` | `false` | Skip auto-loading `CONTEXT.md` from the working directory |
@@ -654,7 +659,7 @@ fallback_after_failures: 2
 mini-agent --doctor
 ```
 
-`--doctor` shows connectivity status for every configured provider, so you can confirm keys and endpoints are correct before running a goal.
+`--doctor` shows connectivity status for every configured provider, checks the git binary, session file health, and whether a stale goal is blocking new goals — so you can confirm everything is ready before running.
 
 ---
 
@@ -707,14 +712,17 @@ mini-agent is specifically tuned for CPU-only inference. These configurations ar
 
 ### Model tiers — what works at each size
 
-| Model | RAM | Chat | Single-file ops | `/goal` multi-file | Notes |
-|---|---|---|---|---|---|
-| `qwen2.5-coder:1.5b` | ~1.5 GB | ✓ | ✓ | unreliable | Multi-step goals often stall or loop |
-| `qwen2.5-coder:3b` | ~2.5 GB | ✓ | ✓ | ✓ | Recommended minimum for `/goal` |
-| `qwen2.5-coder:7b` | ~5 GB | ✓ | ✓ | ✓ | Complex reasoning, web tasks, reliable |
-| `qwen2.5-coder:14b` | ~10 GB | ✓ | ✓ | ✓ | Best quality; GPU recommended |
+| Model | RAM | Chat | Single-file ops | `/goal` multi-file | Step time (CPU) | Notes |
+|---|---|---|---|---|---|---|
+| `qwen2.5-coder:1.5b` | ~1.5 GB | ✓ | ✓ | unreliable | ~90s | Multi-step goals may report success without creating files (false positive) |
+| `llama3.2:3b` | ~2.5 GB | ✓ | ✓ | unreliable | ~5 min | Loop-detection stops multi-file goals; fine for single-file and chat |
+| `qwen2.5-coder:3b` | ~2.5 GB | ✓ | ✓ | ✓ | ~3 min | Recommended minimum for `/goal`; coder models are more reliable for code tasks |
+| `qwen2.5-coder:7b` | ~5 GB | ✓ | ✓ | ✓ | ~8 min | Complex reasoning, web tasks, reliable |
+| `qwen2.5-coder:14b` | ~10 GB | ✓ | ✓ | ✓ | — | Best quality; GPU recommended |
 
-**Practical rule:** use `1.5b` for chat and simple file ops on tight hardware. Switch to `3b` (or higher) when you need `/goal` to reliably complete multi-file tasks.
+> Step times are approximate measurements on a 4-core / 8 GB CPU-only machine. Expect 2–3× longer on Raspberry Pi, 2–3× shorter on a modern laptop.
+
+**Practical rule:** use `1.5b` for chat and simple file ops on tight hardware. Switch to `qwen2.5-coder:3b` (or higher) when you need `/goal` to reliably complete multi-file tasks. General-purpose 3B models (like `llama3.2:3b`) are unreliable for multi-step code goals — prefer a coder model.
 
 ```bash
 # Switch model for the current session without restarting
@@ -742,7 +750,7 @@ ollama:
 ```
 
 **Check context pressure:**  
-The `[119/2048 tok]` counter at the prompt shows token usage in real time. If it approaches your `num_ctx`, use `/forget 4` to drop old messages, or `/clear` to reset.
+The `[119/2048 tok]` counter at the prompt shows token usage in real time. If it approaches your `num_ctx`, use `/compact` to drop old messages (keeping the last 4), `/forget 4` to drop a specific number, or `/clear` to reset entirely.
 
 **For the slowest hardware (Raspberry Pi, Jetson Nano):**
 - Use `qwen2.5-coder:1.5b` — it's the fastest model with reliable tool use

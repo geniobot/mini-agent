@@ -77,6 +77,8 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 	var notes string
 	var prevSig stepSig
 	var consecutiveNoTool int
+	var countToolCalls int // require at least one real tool call before accepting DONE
+	var blockedDoneCount int // times DONE was rejected for zero tool calls
 
 	for step := 1; step <= maxSteps; step++ {
 		l.printf("%s[step %d/%d]%s\n", ansiTeal, step, maxSteps, ansiReset)
@@ -90,7 +92,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 		msgs := []session.Message{
 			{Role: "system", Content: goalSystem},
-			{Role: "user", Content: buildGoalPrompt(goal, step, notes)},
+			{Role: "user", Content: buildGoalPrompt(goal, step, notes, blockedDoneCount)},
 		}
 
 		resp, err := l.chatOnceWith(stepCtx, msgs)
@@ -109,6 +111,13 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 		// Check for completion before attempting tool parsing.
 		if summary, done := checkDone(resp.Content); done {
+			if countToolCalls == 0 {
+				blockedDoneCount++
+				consecutiveNoTool++ // treat as a no-tool step for fallback purposes
+				l.printf("%s[step %d] model signalled DONE without performing any actions — continuing%s\n", ansiYellow, step, ansiReset)
+				notes = appendNotes(notes, fmt.Sprintf("step %d [warning]", step), "model claimed done without tool calls — ignored")
+				continue
+			}
 			if l.quiet {
 				fmt.Println(summary)
 			} else {
@@ -160,7 +169,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		if tc.Function.Name == "write_file" && l.registry.ConfirmWriteFile() {
 			if path, ok := tc.Function.Arguments["path"].(string); ok {
 				if _, err := os.Stat(filepath.Clean(path)); err == nil {
-					if !confirm(fmt.Sprintf("Overwrite existing file %q? [y/N]: ", path)) {
+					if !confirmOverwrite(path) {
 						notes = appendNotes(notes, fmt.Sprintf("step %d [denied]", step), "user denied the overwrite")
 						continue
 					}
@@ -188,6 +197,7 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 
 		notes = appendNotes(notes, fmt.Sprintf("step %d [%s]", step, tc.Function.Name), truncStr(result, maxNoteLen))
 		consecutiveNoTool = 0
+		countToolCalls++
 	}
 
 	l.printf("\n%s[goal limit reached after %d steps without DONE signal]%s\n\n", ansiDim, maxSteps, ansiReset)
@@ -195,14 +205,20 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 	return nil
 }
 
-func buildGoalPrompt(goal string, step int, notes string) string {
+func buildGoalPrompt(goal string, step int, notes string, blockedDoneCount int) string {
 	if step == 1 {
 		return "Goal: " + goal + "\n\nCall a tool to start."
 	}
-	return fmt.Sprintf(
-		"Goal: %s\n\nProgress so far:\n%s\nCall another tool to continue, or output DONE: <summary> only when every task is complete.",
-		goal, notes,
-	)
+	base := fmt.Sprintf("Goal: %s\n\nProgress so far:\n%s", goal, notes)
+	if blockedDoneCount > 0 {
+		return base + fmt.Sprintf(
+			"\n\nWARNING: you have signalled DONE %d time(s) without calling any tools. "+
+				"The goal is NOT complete until you actually call the required tools (e.g. write_file). "+
+				"Do NOT output DONE. Call a tool now.",
+			blockedDoneCount,
+		)
+	}
+	return base + "\n\nCall another tool to continue, or output DONE: <summary> only when every task is complete."
 }
 
 // appendNotes appends a labelled result to the running notes string,

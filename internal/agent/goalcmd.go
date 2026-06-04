@@ -237,6 +237,9 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 			ansiYellow, l.activeProvider.Model, ansiReset)
 	}
 
+	var sessionToolCalls int // tool calls in the current session (not cumulative across restarts)
+	var blockedDoneCount int
+
 	for {
 		if maxSteps > 0 && g.Steps >= maxSteps {
 			l.printf("\n%s[goal paused: reached %d step limit — /goal resume to continue]%s\n\n",
@@ -260,7 +263,7 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 
 		msgs := []session.Message{
 			{Role: "system", Content: persistentGoalSystem},
-			{Role: "user", Content: buildPersistentGoalPrompt(g)},
+			{Role: "user", Content: buildPersistentGoalPrompt(g, blockedDoneCount)},
 		}
 
 		resp, err := l.chatOnceWith(stepCtx, msgs)
@@ -292,6 +295,14 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 
 		// Completion signal.
 		if summary, done := checkDone(resp.Content); done {
+			if sessionToolCalls == 0 {
+				blockedDoneCount++
+				l.printf("%s[step %d] model signalled DONE without performing any actions — continuing%s\n", ansiYellow, g.Steps, ansiReset)
+				g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [warning]", g.Steps), "model claimed done without tool calls — ignored")
+				g.UpdatedAt = time.Now()
+				saveGoalState(statePath, g)
+				continue
+			}
 			l.printf("\n%s[✓ goal achieved]%s %s\n\n", ansiGreen, ansiReset, summary)
 			g.Status = GoalAchieved
 			g.LastReason = summary
@@ -339,7 +350,7 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 		if tc.Function.Name == "write_file" && l.registry.ConfirmWriteFile() {
 			if path, ok := tc.Function.Arguments["path"].(string); ok {
 				if _, statErr := os.Stat(filepath.Clean(path)); statErr == nil {
-					if !confirm(fmt.Sprintf("Overwrite existing file %q? [y/N]: ", path)) {
+					if !confirmOverwrite(path) {
 						g.Notes = appendGoalNotes(g.Notes, fmt.Sprintf("step %d [denied]", g.Steps), "user denied overwrite")
 						g.UpdatedAt = time.Now()
 						saveGoalState(statePath, g)
@@ -395,12 +406,22 @@ func (l *Loop) runGoalLoop(ctx context.Context, g *GoalState, statePath string) 
 		g.LastReason = fmt.Sprintf("step %d: %s", g.Steps, tc.Function.Name)
 		g.UpdatedAt = time.Now()
 		saveGoalState(statePath, g)
+		sessionToolCalls++
 	}
 }
 
-func buildPersistentGoalPrompt(g *GoalState) string {
+func buildPersistentGoalPrompt(g *GoalState, blockedDoneCount int) string {
 	if g.Steps == 1 {
 		return "Goal: " + g.Objective + "\n\nCall a tool now to start. Do not output DONE yet."
+	}
+	base := fmt.Sprintf("Goal: %s\n\nProgress so far:\n%s", g.Objective, g.Notes)
+	if blockedDoneCount > 0 {
+		return base + fmt.Sprintf(
+			"\n\nWARNING: you have signalled DONE %d time(s) without calling any tools. "+
+				"The goal is NOT complete until you actually call the required tools (e.g. write_file). "+
+				"Do NOT output DONE. Call a tool now.",
+			blockedDoneCount,
+		)
 	}
 	calls := countToolCalls(g.Notes)
 	var directive string
@@ -412,13 +433,17 @@ func buildPersistentGoalPrompt(g *GoalState) string {
 	default:
 		directive = fmt.Sprintf("You have completed %d actions so far. Call another tool to continue, or output DONE: <summary> only when every part of the goal is fully complete.", calls)
 	}
-	return fmt.Sprintf("Goal: %s\n\nProgress so far:\n%s\n%s", g.Objective, g.Notes, directive)
+	return base + "\n" + directive
 }
 
 // countToolCalls returns the number of steps that actually executed a tool
 // (not counting reasoning-only steps or denied steps).
 func countToolCalls(notes string) int {
-	tools := []string{"[write_file]", "[read_file]", "[append_file]", "[list_dir]", "[run_command]", "[web_fetch]"}
+	tools := []string{
+		"[write_file]", "[read_file]", "[edit_file]", "[append_file]",
+		"[list_dir]", "[run_command]", "[web_fetch]", "[search_files]",
+		"[git]", "[json_query]",
+	}
 	count := 0
 	for _, line := range strings.Split(notes, "\n") {
 		for _, t := range tools {

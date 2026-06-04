@@ -3,11 +3,13 @@ package agent
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 
 	"mini-agent/internal/config"
 	"mini-agent/internal/llm"
+	"mini-agent/internal/session"
 )
 
 // RunDoctor checks config validity, provider connectivity, and model availability.
@@ -75,6 +77,39 @@ func RunDoctor(cfg *config.Config) {
 				} else {
 					fmt.Printf("  %s✓%s  %-12s api key set (%s) — model: %s\n", ansiGreen, ansiReset, name, p.APIKeyEnv, p.Model)
 				}
+			}
+		}
+	}
+
+	// Optional tool binaries.
+	if _, err := exec.LookPath("git"); err != nil {
+		fmt.Printf("  %s-%s  git       not found in PATH (git tool will be disabled)\n", ansiYellow, ansiReset)
+	} else {
+		fmt.Printf("  %s✓%s  git       found\n", ansiGreen, ansiReset)
+	}
+
+	// Session file.
+	if sp, err := session.DefaultPath(); err == nil {
+		if _, err := os.Stat(sp); err == nil {
+			fmt.Printf("  %s✓%s  session   %s\n", ansiGreen, ansiReset, sp)
+		} else {
+			fmt.Printf("  %s-%s  session   no saved session yet\n", ansiDim, ansiReset)
+		}
+	}
+
+	// Goal state.
+	if gp, err := GoalStatePath(); err == nil {
+		if _, statErr := os.Stat(gp); statErr == nil {
+			g, loadErr := loadGoalState(gp)
+			if loadErr != nil {
+				fmt.Printf("  %s✗%s  goal      %s is unreadable: %v\n", ansiRed, ansiReset, gp, loadErr)
+				ok = false
+			} else if g != nil && g.Status == GoalActive {
+				fmt.Printf("  %s!%s  goal      active goal in progress: %q (use /goal clear to reset)\n",
+					ansiYellow, ansiReset, truncStr(g.Objective, 60))
+			} else if g != nil {
+				fmt.Printf("  %s✓%s  goal      last goal: %q [%s]\n", ansiDim, ansiReset,
+					truncStr(g.Objective, 60), g.Status)
 			}
 		}
 	}

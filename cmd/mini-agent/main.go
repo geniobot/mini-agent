@@ -35,6 +35,8 @@ func main() {
 	systemFlag     := flag.String("system", "", "override the system prompt for this session")
 	completionFlag := flag.String("completion", "", "print shell completion script (bash|zsh) and exit")
 	versionFlag    := flag.Bool("version", false, "print version and exit")
+	debugFlag      := flag.Bool("debug", false, "print raw LLM requests and responses to stderr")
+	logFlag        := flag.Int("log", 0, "print last N tool-call log entries from run.log and exit (0 = show 20)")
 	flag.Parse()
 
 	// Pipe/stdin support: if stdin is not a TTY, read it and combine with any
@@ -68,6 +70,23 @@ func main() {
 		return
 	}
 
+	// --log [N]: show recent run log entries without starting a session.
+	// flag.Visit detects whether --log was explicitly passed (value 0 = show 20).
+	logExplicit := false
+	flag.Visit(func(f *flag.Flag) {
+		if f.Name == "log" {
+			logExplicit = true
+		}
+	})
+	if logExplicit {
+		n := *logFlag
+		if n <= 0 {
+			n = 20
+		}
+		agent.PrintLog(n)
+		return
+	}
+
 	if *setupFlag {
 		runSetup(config.FindConfig(*configPath))
 		return
@@ -89,6 +108,17 @@ func main() {
 
 	if *systemFlag != "" {
 		cfg.Agent.SystemPrompt = *systemFlag
+	}
+
+	if *modelFlag != "" {
+		if len(cfg.Providers) == 0 {
+			cfg.Ollama.Model = *modelFlag
+		} else {
+			if p, ok := cfg.Providers[cfg.DefaultProvider]; ok {
+				p.Model = *modelFlag
+				cfg.Providers[cfg.DefaultProvider] = p
+			}
+		}
 	}
 
 	if *doctor {
@@ -132,21 +162,13 @@ func main() {
 		return
 	}
 
-	if *modelFlag != "" {
-		if len(cfg.Providers) == 0 {
-			cfg.Ollama.Model = *modelFlag
-		} else {
-			if p, ok := cfg.Providers[cfg.DefaultProvider]; ok {
-				p.Model = *modelFlag
-				cfg.Providers[cfg.DefaultProvider] = p
-			}
-		}
-	}
-
 	loop := agent.New(cfg)
 
 	if *quiet {
 		loop.SetQuiet(true)
+	}
+	if *debugFlag {
+		loop.SetDebug(true)
 	}
 
 	// Run log — open once, close on exit. Errors are non-fatal.

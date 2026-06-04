@@ -60,6 +60,18 @@ func TestTruncStr(t *testing.T) {
 	}
 }
 
+func TestCountToolCallsInNotes(t *testing.T) {
+	notes := "step 1 [write_file]: wrote main.py\nstep 2 [read_file]: read config\nstep 3 [no tool]: thought about it\n"
+	got := countToolCalls(notes)
+	if got != 2 {
+		t.Errorf("countToolCalls = %d, want 2", got)
+	}
+	empty := countToolCalls("")
+	if empty != 0 {
+		t.Errorf("empty notes should give 0, got %d", empty)
+	}
+}
+
 func TestAppendNotes(t *testing.T) {
 	t.Run("empty notes gets entry", func(t *testing.T) {
 		got := appendNotes("", "step 1 [write_file]", "wrote hello.txt")

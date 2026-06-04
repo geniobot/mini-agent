@@ -74,8 +74,11 @@ func TestEditFile_uniqueReplace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EditFile: %v", err)
 	}
-	if !strings.Contains(out, "1 occurrence") {
-		t.Errorf("expected 1 occurrence, got: %s", out)
+	if !strings.Contains(out, "1 replacement") {
+		t.Errorf("expected 1 replacement, got: %s", out)
+	}
+	if !strings.Contains(out, "- print('hi')") || !strings.Contains(out, "+ print('hello')") {
+		t.Errorf("expected inline diff, got: %s", out)
 	}
 	b, _ := os.ReadFile(p)
 	if string(b) != "print('hello')\nx = 1\n" {
@@ -111,8 +114,8 @@ func TestEditFile_replaceAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EditFile replaceAll: %v", err)
 	}
-	if !strings.Contains(out, "3 occurrence") {
-		t.Errorf("expected 3 occurrences, got: %s", out)
+	if !strings.Contains(out, "3 replacement") {
+		t.Errorf("expected 3 replacements, got: %s", out)
 	}
 	b, _ := os.ReadFile(p)
 	if string(b) != "b\nb\nb\n" {
@@ -184,5 +187,31 @@ func TestReadFileRange_offsetPastEnd(t *testing.T) {
 	}
 	if !strings.Contains(out, "past end") {
 		t.Errorf("expected past-end notice, got: %s", out)
+	}
+}
+
+func TestWriteFile_sizeLimitRejected(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "big.txt")
+	big := strings.Repeat("x", maxFileBytes+1)
+	_, err := WriteFile(p, big)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Errorf("expected size-limit error, got: %v", err)
+	}
+	if _, statErr := os.Stat(p); statErr == nil {
+		t.Error("file should not have been created")
+	}
+}
+
+func TestWriteFile_atLimitAccepted(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "ok.txt")
+	exact := strings.Repeat("x", maxFileBytes)
+	out, err := WriteFile(p, exact)
+	if err != nil {
+		t.Fatalf("WriteFile at limit: %v", err)
+	}
+	if !strings.Contains(out, "wrote") {
+		t.Errorf("expected wrote confirmation, got: %s", out)
 	}
 }

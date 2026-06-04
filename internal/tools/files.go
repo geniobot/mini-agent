@@ -103,10 +103,45 @@ func EditFile(path, oldString, newString string, replaceAll bool) (string, error
 	if err := os.WriteFile(clean, []byte(updated), 0o644); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("edited %s — replaced %d occurrence(s)", clean, count), nil
+	return fmt.Sprintf("edited %s — %d replacement(s)%s", clean, count, editDiff(oldString, newString, 3)), nil
+}
+
+// editDiff returns a compact inline diff for tool feedback.
+// Shows at most maxLines removed and maxLines added, prefixed with - / +.
+func editDiff(oldString, newString string, maxLines int) string {
+	trimLine := func(s string) string {
+		s = strings.TrimRight(s, " \t")
+		if len(s) > 80 {
+			return s[:80] + "…"
+		}
+		return s
+	}
+
+	oldLines := strings.Split(strings.TrimRight(oldString, "\n"), "\n")
+	newLines := strings.Split(strings.TrimRight(newString, "\n"), "\n")
+
+	var b strings.Builder
+	for i, l := range oldLines {
+		if i >= maxLines {
+			fmt.Fprintf(&b, "\n  - …(%d more lines)", len(oldLines)-maxLines)
+			break
+		}
+		fmt.Fprintf(&b, "\n  - %s", trimLine(l))
+	}
+	for i, l := range newLines {
+		if i >= maxLines {
+			fmt.Fprintf(&b, "\n  + …(%d more lines)", len(newLines)-maxLines)
+			break
+		}
+		fmt.Fprintf(&b, "\n  + %s", trimLine(l))
+	}
+	return b.String()
 }
 
 func WriteFile(path, content string) (string, error) {
+	if len(content) > maxFileBytes {
+		return "", fmt.Errorf("content is %d bytes — exceeds %d byte write limit; split into smaller files or use append_file", len(content), maxFileBytes)
+	}
 	clean := filepath.Clean(expandPath(path))
 	if err := os.MkdirAll(filepath.Dir(clean), 0o755); err != nil {
 		return "", err

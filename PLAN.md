@@ -1,7 +1,8 @@
 # mini-agent — Engineering Plan
 
-> Last updated: 2026-05-29
+> Last updated: 2026-06-02
 > Based on deep comparative analysis of Hermes Agent (Python) and OpenClaw (TypeScript).
+> Phase 5–8 complete as of v2.8.0. Phase 9 partially complete (see TODO.md).
 
 ---
 
@@ -62,27 +63,27 @@ It is not a full Hermes/OpenClaw replacement. It captures the useful 20% with 5%
 
 ---
 
-## Current state (v2.6.0)
+## Current state (v2.8.0+)
 
 ### What works
-- Interactive REPL with streaming Ollama responses
-- 5 tools: read_file, write_file, append_file, list_dir, run_command
-- Session persistence (JSON file, auto-save on exit)
-- Goal mode (`/run`) with loop detection and step limits
-- ANSI colors, context pressure indicator, /history command
-- Token budget management with automatic history trimming
-- Config auto-discovery, `~/.mini-agent/config.yaml`
-- One-line installer with auto-config download
-- 35 unit tests across 4 packages
+- Interactive REPL with streaming responses (Ollama + cloud providers)
+- 10 tools: read_file, write_file, edit_file, append_file, list_dir, run_command, web_fetch, search_files, git, json_query
+- `/goal` persistent goal mode, `/run` quick goal mode — both with loop detection and step limits
+- Context summarization on compact (`summarize_on_compact: true` in config)
+- Goal history persisted to `~/.mini-agent/goals.json`, browsable with `/goals`
+- Batch mode (`--batch goals.txt`, `--parallel N`) and daemon mode (`--daemon`)
+- Session persistence, CONTEXT.md auto-injection, `@file` references
+- Config validation, `--doctor` flag, `--setup` wizard
+- Structured run log (`~/.mini-agent/run.log`, JSON lines, 10 MB rotation)
+- Telegram bot mode, multi-provider support (Ollama + OpenAI-compatible)
+- ANSI colors, context pressure indicator, git branch + CWD in prompt
+- `/compact` command for manual context reduction
+- edit_file shows inline diff in tool feedback
+- 8 test packages, all green
 
-### Known gaps (from live testing)
-- Small models (1.5B) don't reliably call tools for code files
-- Goal mode needs better prompt engineering for tiny models
-- No web fetch / network tools
-- No git integration
-- No structured logging or audit trail
-- Config has no validation (bad values fail silently)
-- No cron / scheduled goals
+### Known gaps
+- Small models (1.5B) unreliable for multi-file goals
+- Tool calling reliability varies by model — 3B+ recommended for goal mode
 
 ---
 
