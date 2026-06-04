@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"mini-agent/internal/fileutil"
 )
 
 // DefaultPath returns ~/.mini-agent/session.json.
@@ -27,14 +29,11 @@ func Save(path string, msgs []Message) error {
 	if len(toSave) == 0 {
 		return nil
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(toSave, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return fileutil.WriteAtomic(path, b, 0o644)
 }
 
 // Load reads messages from path. Returns nil, nil if the file does not exist.

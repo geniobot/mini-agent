@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"mini-agent/internal/fileutil"
 )
 
 const maxGoalRecords = 100
@@ -54,12 +56,9 @@ func AppendGoalRecord(path string, r GoalRecord) error {
 	if len(records) > maxGoalRecords {
 		records = records[len(records)-maxGoalRecords:]
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(records, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return fileutil.WriteAtomic(path, b, 0o644)
 }

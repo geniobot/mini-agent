@@ -8,6 +8,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"mini-agent/internal/fileutil"
 	"time"
 
 	"mini-agent/internal/session"
@@ -96,14 +98,11 @@ func loadGoalState(path string) (*GoalState, error) {
 }
 
 func saveGoalState(path string, g *GoalState) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
 	b, err := json.MarshalIndent(g, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, 0o644)
+	return fileutil.WriteAtomic(path, b, 0o644)
 }
 
 func clearGoalFile(path string) error {

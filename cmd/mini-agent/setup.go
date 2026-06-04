@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"mini-agent/internal/fileutil"
 )
 
 type providerPreset struct {
@@ -159,7 +161,7 @@ func patchConfig(path, newBlock string) error {
 		return err
 	}
 	stripped := stripProviderBlock(string(raw))
-	return os.WriteFile(path, []byte(newBlock+stripped), 0o644)
+	return fileutil.WriteAtomic(path, []byte(newBlock+stripped), 0o644)
 }
 
 // stripProviderBlock removes top-level provider-related keys and their children
@@ -214,7 +216,7 @@ func appendToProfile(path, line, envKey string) error {
 				lines = append(lines, l)
 			}
 		}
-		return os.WriteFile(path, []byte(strings.Join(lines, "\n")), 0o600)
+		return fileutil.WriteAtomic(path, []byte(strings.Join(lines, "\n")), 0o600)
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
 	if err != nil {
