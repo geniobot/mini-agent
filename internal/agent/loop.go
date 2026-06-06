@@ -275,6 +275,9 @@ func (l *Loop) Run() error {
 			}
 			l.printGoals(n)
 			continue
+		case input == "/memory":
+			l.printMemory()
+			continue
 		case input == "/model":
 			fmt.Printf("  current model: %s\n", l.activeProvider.Model)
 			continue
@@ -407,6 +410,7 @@ func (l *Loop) printHelp() {
 		{"/copy", "copy last response to clipboard"},
 		{"/models", "list all models available in Ollama"},
 		{"/goals [N]", "list last N completed goals (default 10)"},
+		{"/memory", "list all keys stored in memory"},
 		{"/save <name>", "save current session to ~/.mini-agent/sessions/<name>.json"},
 		{"/load <file>", "inject a file into conversation context"},
 		{"/history [N]", "show last N messages from session (default 6)"},
@@ -1258,6 +1262,21 @@ func (l *Loop) printGoals(n int) {
 			fmt.Printf("       %s%s%s\n", ansiDim, r.Detail, ansiReset)
 		}
 	}
+	fmt.Println()
+}
+
+func (l *Loop) printMemory() {
+	result, err := tools.RunMemory(`{"op":"list"}`)
+	if err != nil {
+		fmt.Printf("[error] reading memory: %v\n", err)
+		return
+	}
+	if result == "memory: (empty)" {
+		l.printf("%s(empty)%s\n", ansiDim, ansiReset)
+		return
+	}
+	fmt.Println()
+	fmt.Println(result)
 	fmt.Println()
 }
 
