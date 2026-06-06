@@ -1,6 +1,8 @@
 package tools
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -9,8 +11,8 @@ import (
 )
 
 const (
-	searchDefaultMax = 50
-	searchMaxLineLen = 200
+	searchDefaultMax   = 50
+	searchMaxLineLen   = 200
 	searchMaxFileBytes = 512 * 1024 // skip files larger than 512 KB
 )
 
@@ -49,9 +51,6 @@ func SearchFiles(pattern, root string, maxResults int) (string, error) {
 		if info.Size() > searchMaxFileBytes {
 			return nil
 		}
-		if isBinaryFile(path) {
-			return nil
-		}
 
 		f, err := os.Open(path)
 		if err != nil {
@@ -59,18 +58,25 @@ func SearchFiles(pattern, root string, maxResults int) (string, error) {
 		}
 		defer f.Close()
 
-		raw, err := io.ReadAll(f)
-		if err != nil {
-			return nil
+		// Read first 512 bytes for binary detection, then stream the rest.
+		var head [512]byte
+		n, _ := f.Read(head[:])
+		if bytes.IndexByte(head[:n], 0) >= 0 {
+			return nil // binary file — null byte found
 		}
 
-		for lineNum, line := range strings.Split(string(raw), "\n") {
+		scanner := bufio.NewScanner(io.MultiReader(bytes.NewReader(head[:n]), f))
+		scanner.Buffer(make([]byte, bufio.MaxScanTokenSize), searchMaxFileBytes)
+		lineNum := 0
+		for scanner.Scan() {
+			lineNum++
+			line := scanner.Text()
 			if strings.Contains(strings.ToLower(line), lower) {
 				display := strings.TrimSpace(line)
 				if len(display) > searchMaxLineLen {
 					display = display[:searchMaxLineLen] + "…"
 				}
-				results = append(results, fmt.Sprintf("%s:%d: %s", path, lineNum+1, display))
+				results = append(results, fmt.Sprintf("%s:%d: %s", path, lineNum, display))
 				if len(results) >= maxResults {
 					capped = true
 					return filepath.SkipAll
@@ -92,21 +98,4 @@ func SearchFiles(pattern, root string, maxResults int) (string, error) {
 		out += fmt.Sprintf("\n[capped at %d results — use a more specific pattern to see more]", maxResults)
 	}
 	return out, nil
-}
-
-// isBinaryFile returns true if the first 512 bytes of a file contain a null byte.
-func isBinaryFile(path string) bool {
-	f, err := os.Open(path)
-	if err != nil {
-		return false
-	}
-	defer f.Close()
-	buf := make([]byte, 512)
-	n, _ := f.Read(buf)
-	for _, b := range buf[:n] {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
 }
