@@ -203,20 +203,18 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		consecutiveNoTool = 0
 		countToolCalls++
 
-		// For single-action goals, skip the follow-up LLM round-trip and auto-complete.
-		// On slow hardware the model is often evicted between steps, making step 2
-		// (just saying DONE) take as long as a cold load. If this was step 1 and
-		// the tool completed successfully, the goal is done.
-		singleActionTools := map[string]bool{
+		// For read-only single-action goals, skip the follow-up LLM round-trip and
+		// auto-complete. On slow hardware the model is often evicted between steps,
+		// making step 2 (just saying DONE) take as long as a cold load.
+		// Write/edit/append are excluded: step 1 may be the first of several file
+		// writes in a multi-file goal, so those must reach the model again.
+		readOnlyTools := map[string]bool{
 			"read_file": true, "list_dir": true, "search_files": true,
-			"write_file": true, "edit_file": true, "append_file": true,
 		}
-		if singleActionTools[tc.Function.Name] && step == 1 && err == nil {
+		if readOnlyTools[tc.Function.Name] && step == 1 && err == nil {
 			summary := tc.Function.Name + " completed"
-			if l.quiet && (tc.Function.Name == "read_file" || tc.Function.Name == "search_files" || tc.Function.Name == "list_dir") {
+			if l.quiet {
 				fmt.Println(result)
-			} else if l.quiet {
-				fmt.Println(summary)
 			} else {
 				fmt.Printf("\n%s[✓ done]%s %s\n\n", ansiGreen, ansiReset, summary)
 			}
