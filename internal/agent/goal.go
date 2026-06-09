@@ -35,7 +35,6 @@ Run a git command:
 {"name":"git","arguments":{"subcommand":"status","args":["--short"]}}
 
 Use write_file for new files, edit_file to change existing files.
-Always call a tool first. Never output DONE on the first step.
 After each tool result, either call another tool or signal completion.
 Only signal completion when ALL tasks are done: DONE: <one sentence summary>`
 
@@ -203,6 +202,27 @@ func (l *Loop) runGoal(ctx context.Context, goal string) error {
 		notes = appendNotes(notes, fmt.Sprintf("step %d [%s]", step, tc.Function.Name), truncStr(result, maxNoteLen))
 		consecutiveNoTool = 0
 		countToolCalls++
+
+		// For single-action goals, skip the follow-up LLM round-trip and auto-complete.
+		// On slow hardware the model is often evicted between steps, making step 2
+		// (just saying DONE) take as long as a cold load. If this was step 1 and
+		// the tool completed successfully, the goal is done.
+		singleActionTools := map[string]bool{
+			"read_file": true, "list_dir": true, "search_files": true,
+			"write_file": true, "edit_file": true, "append_file": true,
+		}
+		if singleActionTools[tc.Function.Name] && step == 1 && err == nil {
+			summary := tc.Function.Name + " completed"
+			if l.quiet && (tc.Function.Name == "read_file" || tc.Function.Name == "search_files" || tc.Function.Name == "list_dir") {
+				fmt.Println(result)
+			} else if l.quiet {
+				fmt.Println(summary)
+			} else {
+				fmt.Printf("\n%s[✓ done]%s %s\n\n", ansiGreen, ansiReset, summary)
+			}
+			l.recordGoalResult(goal, "done", summary)
+			return nil
+		}
 	}
 
 	l.printf("\n%s[goal limit reached after %d steps without DONE signal]%s\n\n", ansiDim, maxSteps, ansiReset)
