@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 // OpenAIClient implements Client and ModelLister against any OpenAI-compatible

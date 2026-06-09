@@ -7,9 +7,9 @@ import (
 	"slices"
 	"strings"
 
-	"mini-agent/internal/config"
-	"mini-agent/internal/llm"
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/llm"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 // RunDoctor checks config validity, provider connectivity, and model availability.

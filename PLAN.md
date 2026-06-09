@@ -76,8 +76,6 @@ It is not a full Hermes/OpenClaw replacement. It captures the useful 20% with 5%
 ### Known gaps
 - Small models (1.5B) unreliable for multi-file goals
 - Tool calling reliability varies by model — 3B+ recommended for goal mode
-- No desktop notifications for long-running goals
-- No persistent key-value memory across sessions (beyond goal history)
 
 ---
 

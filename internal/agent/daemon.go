@@ -10,8 +10,8 @@ import (
 	"syscall"
 	"time"
 
-	"mini-agent/internal/config"
-	"mini-agent/internal/scheduler"
+	"github.com/geniobot/mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/scheduler"
 )
 
 type daemonEntry struct {

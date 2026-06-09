@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"mini-agent/internal/fileutil"
+	"github.com/geniobot/mini-agent/internal/fileutil"
 )
 
 // memoryPathOverride is set by tests to redirect storage to a temp dir.

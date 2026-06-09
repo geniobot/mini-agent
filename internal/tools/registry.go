@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"mini-agent/internal/config"
-	"mini-agent/internal/llm"
+	"github.com/geniobot/mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/llm"
 )
 
 type Registry struct {

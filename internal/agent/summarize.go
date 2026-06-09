@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	"mini-agent/internal/llm"
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/llm"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 const summarizeMaxMsgChars = 600 // per-message content cap when building the transcript

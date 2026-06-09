@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 const goalSystem = `You are a local automation agent executing a goal step by step.

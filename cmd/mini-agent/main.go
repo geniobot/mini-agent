@@ -10,11 +10,11 @@ import (
 	"strings"
 	"syscall"
 
-	"mini-agent/internal/agent"
-	"mini-agent/internal/config"
-	"mini-agent/internal/runlog"
-	"mini-agent/internal/session"
-	"mini-agent/internal/telegram"
+	"github.com/geniobot/mini-agent/internal/agent"
+	"github.com/geniobot/mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/runlog"
+	"github.com/geniobot/mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/telegram"
 )
 
 func main() {

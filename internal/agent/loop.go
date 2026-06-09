@@ -17,12 +17,12 @@ import (
 	"syscall"
 	"time"
 
-	"mini-agent/internal/config"
-	"mini-agent/internal/llm"
-	"mini-agent/internal/models"
-	"mini-agent/internal/runlog"
-	"mini-agent/internal/session"
-	"mini-agent/internal/tools"
+	"github.com/geniobot/mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/llm"
+	"github.com/geniobot/mini-agent/internal/models"
+	"github.com/geniobot/mini-agent/internal/runlog"
+	"github.com/geniobot/mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/tools"
 )
 
 type Loop struct {

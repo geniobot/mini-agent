@@ -3,7 +3,7 @@ package llm
 import (
 	"context"
 
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 type ToolSpec struct {

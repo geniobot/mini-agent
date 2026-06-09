@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"mini-agent/internal/fileutil"
+	"github.com/geniobot/mini-agent/internal/fileutil"
 )
 
 const maxGoalRecords = 100

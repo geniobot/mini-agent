@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/config"
 )
 
 // BatchResult is the JSON-line record written to stdout for each goal.

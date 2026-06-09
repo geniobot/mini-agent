@@ -207,8 +207,13 @@ func Load(path string) (*Config, error) {
 	if len(cfg.Providers) > 0 && cfg.FallbackAfterFailures <= 0 {
 		cfg.FallbackAfterFailures = 2
 	}
-	// Bot token from environment variable takes precedence over config file.
-	// This keeps credentials out of version-controlled files.
+	// Bot token must come from the TELEGRAM_BOT_TOKEN environment variable.
+	// If a token was set directly in config.yaml, reject it loudly so the
+	// user doesn't accidentally commit a credential to version control.
+	if cfg.Telegram.BotToken != "" {
+		return nil, fmt.Errorf("telegram.bot_token must not be set in config.yaml — " +
+			"export TELEGRAM_BOT_TOKEN=<your-token> instead")
+	}
 	if envToken := os.Getenv("TELEGRAM_BOT_TOKEN"); envToken != "" {
 		cfg.Telegram.BotToken = envToken
 	}

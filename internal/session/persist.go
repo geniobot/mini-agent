@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"mini-agent/internal/fileutil"
+	"github.com/geniobot/mini-agent/internal/fileutil"
 )
 
 // DefaultPath returns ~/.mini-agent/session.json.

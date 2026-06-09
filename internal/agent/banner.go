@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mini-agent/internal/config"
+	"github.com/geniobot/mini-agent/internal/config"
 )
 
 // Color variables — set to empty strings by SetPlainMode for script-friendly output.

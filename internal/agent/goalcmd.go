@@ -9,10 +9,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mini-agent/internal/fileutil"
+	"github.com/geniobot/mini-agent/internal/fileutil"
 	"time"
 
-	"mini-agent/internal/session"
+	"github.com/geniobot/mini-agent/internal/session"
 )
 
 // persistentGoalSystem is the system prompt for /goal mode.

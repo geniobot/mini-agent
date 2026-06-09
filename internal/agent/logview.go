@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"mini-agent/internal/runlog"
+	"github.com/geniobot/mini-agent/internal/runlog"
 )
 
 // PrintLog reads the last n entries from the default run log and prints them

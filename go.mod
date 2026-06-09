@@ -1,4 +1,4 @@
-module mini-agent
+module github.com/geniobot/mini-agent
 
 go 1.22
 

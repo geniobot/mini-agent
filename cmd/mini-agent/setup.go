@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"mini-agent/internal/fileutil"
+	"github.com/geniobot/mini-agent/internal/fileutil"
 )
 
 type providerPreset struct {

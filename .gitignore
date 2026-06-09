@@ -1,7 +1,12 @@
 bin/
+mini-agent
 *.exe
 *.test
 *.out
+coverage.out
+cpu.out
+mem.out
+profile.out
 
 # local scratch and generated files
 *.txt
